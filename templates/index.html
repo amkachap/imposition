@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocRaptor PDF Output Tester</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-secondary: #141416;
+            --bg-tertiary: #1c1c1f;
+            --border: #2a2a2e;
+            --border-hover: #3a3a3e;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1a6;
+            --text-muted: #6b6b70;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --radius: 8px;
+            --radius-lg: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+        }
+
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+        }
+
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="color"],
+        select {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        input[type="color"] {
+            height: 44px;
+            padding: 4px;
+            cursor: pointer;
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23a1a1a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 40px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: 400;
+        }
+
+        .checkbox-description {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-left: 28px;
+            margin-top: -4px;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg-tertiary);
+        }
+
+        .upload-area:hover,
+        .upload-area.dragover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .upload-area.has-file {
+            border-color: var(--success);
+            border-style: solid;
+        }
+
+        .upload-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 16px;
+            opacity: 0.5;
+        }
+
+        .upload-text {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .upload-text strong {
+            color: var(--accent);
+        }
+
+        .file-info {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--success);
+        }
+
+        #imagePreview {
+            margin-top: 16px;
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: var(--radius);
+            display: none;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 24px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            border-color: var(--border-hover);
+            background: var(--bg-secondary);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .info-box h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .info-box p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .info-box code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .dimensions-display {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .dimensions-display .size {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .dimensions-display .label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px 24px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+        }
+
+        .status-bar.visible {
+            display: flex;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-text {
+            font-size: 14px;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-top: 16px;
+            color: var(--error);
+            font-size: 14px;
+            display: none;
+        }
+
+        .error-message.visible {
+            display: block;
+        }
+
+        .success-message {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-top: 16px;
+            color: var(--success);
+            font-size: 14px;
+            display: none;
+        }
+
+        .success-message.visible {
+            display: block;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 20px 0;
+        }
+
+        .section-header {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            margin-top: 8px;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 600px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .icc-upload-area {
+            border: 1px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg-tertiary);
+        }
+
+        .icc-upload-area:hover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .icc-upload-area.has-file {
+            border-color: var(--success);
+            border-style: solid;
+        }
+
+        .icc-upload-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .icc-upload-text {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .icc-file-info {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--success);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .icc-file-info .remove-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 14px;
+        }
+
+        .icc-file-info .remove-btn:hover {
+            color: var(--error);
+        }
+
+        .icc-profiles-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .icc-profile-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            font-size: 13px;
+        }
+
+        .icc-profile-item .profile-name {
+            color: var(--text-primary);
+        }
+
+        .icc-profile-item .delete-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 12px;
+        }
+
+        .icc-profile-item .delete-btn:hover {
+            color: var(--error);
+        }
+
+        .no-profiles-message {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-style: italic;
+            padding: 12px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>DocRaptor PDF Output Tester</h1>
+            <p class="subtitle">Test different PDF output settings for print-ready production</p>
+        </header>
+
+        <form id="pdfForm" enctype="multipart/form-data">
+            <div class="main-grid">
+                <!-- Left Column: Settings -->
+                <div class="panel">
+                    <h3 class="panel-title">Configuration</h3>
+                    
+                    <div class="form-group">
+                        <label for="api_key">DocRaptor API Key</label>
+                        <input type="password" id="api_key" name="api_key" placeholder="YOUR_API_KEY_HERE" required>
+                    </div>
+
+                    <div class="dimensions-display">
+                        <div class="size" id="dimensionsDisplay">4.75" × 6.75"</div>
+                        <div class="label">Trim size per panel</div>
+                    </div>
+
+                    <hr>
+                    <div class="section-header">Card Type (Imposition)</div>
+
+                    <div class="form-group">
+                        <label for="card_type">Card Template</label>
+                        <select id="card_type" name="card_type">
+                            <option value="flat" selected>Flat Card (2 pages: front + back)</option>
+                            <option value="folded">Folded Card (2 spreads: outside + inside)</option>
+                        </select>
+                    </div>
+
+                    <div class="info-box" id="cardTypeInfo">
+                        <h4>Flat Card Layout</h4>
+                        <p>
+                            <strong>Page 1:</strong> Front (your uploaded image)<br>
+                            <strong>Page 2:</strong> Back (simulated placeholder content)
+                        </p>
+                    </div>
+
+                    <hr>
+                    <div class="section-header">PDF Output Settings</div>
+
+                    <div class="two-col">
+                        <div class="form-group">
+                            <label for="pdf_profile">PDF Profile</label>
+                            <select id="pdf_profile" name="pdf_profile">
+                                <option value="PDF/X-4" selected>PDF/X-4 (RGB + Transparency)</option>
+                                <option value="PDF/X-1a">PDF/X-1a (CMYK Only)</option>
+                                <option value="PDF/X-3">PDF/X-3</option>
+                                <option value="PDF/A-1a">PDF/A-1a (Archive)</option>
+                                <option value="PDF/A-1b">PDF/A-1b (Archive Basic)</option>
+                                <option value="PDF/A-3a">PDF/A-3a</option>
+                                <option value="PDF/A-3b">PDF/A-3b</option>
+                                <option value="">Default (No Profile)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="icc_profile">ICC Color Profile</label>
+                            <select id="icc_profile" name="icc_profile">
+                                <option value="">-- No profile selected --</option>
+                                {% for profile in icc_profiles %}
+                                <option value="{{ profile.filename }}">{{ profile.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Upload New ICC Profile</label>
+                        <div class="icc-upload-area" id="iccUploadArea">
+                            <input type="file" id="iccFileInput" name="icc_file" accept=".icc" hidden>
+                            <div class="icc-upload-content">
+                                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.5; margin-bottom: 8px;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                </svg>
+                                <span class="icc-upload-text">Click to upload .icc file</span>
+                            </div>
+                            <div class="icc-file-info hidden" id="iccFileInfo"></div>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="section-header">Color Options</div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="use_true_black" name="use_true_black" checked>
+                        <label for="use_true_black">Use True Black</label>
+                    </div>
+                    <p class="checkbox-description">Forces black text to use only K ink (prevents muddy 4-color black)</p>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="use_cmyk_colors" name="use_cmyk_colors">
+                        <label for="use_cmyk_colors">Convert CSS Colors to CMYK</label>
+                    </div>
+                    <p class="checkbox-description">Converts CSS color values to CMYK in the PDF</p>
+
+                    <hr>
+                    <div class="section-header">Bleed & Layout</div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="add_bleed" name="add_bleed" checked>
+                        <label for="add_bleed">Add 1/8" Bleed</label>
+                    </div>
+                    <p class="checkbox-description">Extends image 0.125" beyond trim on all sides. Trim marks at 4.75" × 6.75"</p>
+
+                    <div class="two-col">
+                        <div class="form-group">
+                            <label for="image_fit">Image Fit Mode</label>
+                            <select id="image_fit" name="image_fit">
+                                <option value="cover" selected>Cover (fill, may crop)</option>
+                                <option value="contain">Contain (fit, may letterbox)</option>
+                                <option value="fill">Fill (stretch)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="background_color">Background Color</label>
+                            <input type="color" id="background_color" name="background_color" value="#ffffff">
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="section-header">API Options</div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="test_mode" name="test_mode" checked>
+                        <label for="test_mode">Test Mode</label>
+                    </div>
+                    <p class="checkbox-description">Uses test API (adds watermark, doesn't count against quota)</p>
+                </div>
+
+                <!-- Right Column: Upload & Actions -->
+                <div class="panel">
+                    <h3 class="panel-title">Image Upload</h3>
+                    
+                    <div class="info-box">
+                        <h4>PDF/X-4 Recommended Workflow</h4>
+                        <p>Keep images as <strong>sRGB</strong> or <strong>Display P3</strong>. The PDF/X-4 profile preserves RGB with transparency while embedding a CMYK output intent for print compliance.</p>
+                    </div>
+
+                    <div class="upload-area" id="uploadArea">
+                        <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        <p class="upload-text">
+                            <strong>Click to upload</strong> or drag and drop<br>
+                            PNG, JPG, TIFF, WebP (max 50MB)
+                        </p>
+                        <input type="file" id="imageInput" name="image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden required>
+                        <div class="file-info hidden" id="fileInfo"></div>
+                        <img id="imagePreview" alt="Preview">
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="generateBtn">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Generate PDF
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="previewBtn">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                            </svg>
+                            View HTML
+                        </button>
+                    </div>
+
+                    <div class="error-message" id="errorMessage"></div>
+                    <div class="success-message" id="successMessage"></div>
+
+                    <div class="info-box" style="margin-top: 24px;">
+                        <h4>Output Summary</h4>
+                        <p id="outputSummary">
+                            Profile: <code>PDF/X-4</code><br>
+                            ICC: <code>GRACoL 2006 Coated</code><br>
+                            Type: <code>Flat Card</code><br>
+                            Size: <code>5" × 7" (with bleed)</code><br>
+                            Trim: <code>4.75" × 6.75"</code> per panel<br>
+                            Pages: <code>2 pages (front + back)</code><br>
+                            Trim marks: <code>Yes</code>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+        <div class="spinner"></div>
+        <span class="status-text" id="statusText">Generating PDF...</span>
+    </div>
+
+    <!-- HTML Preview Modal -->
+    <div id="htmlModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:1000; padding:40px; overflow:auto;">
+        <div style="max-width:900px; margin:0 auto; background:var(--bg-secondary); border-radius:var(--radius-lg); padding:24px; position:relative;">
+            <button onclick="document.getElementById('htmlModal').style.display='none'" style="position:absolute; top:16px; right:16px; background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-primary); padding:8px 16px; border-radius:var(--radius); cursor:pointer;">Close</button>
+            <h3 style="margin-bottom:16px;">Generated HTML</h3>
+            <pre id="htmlPreview" style="background:var(--bg-tertiary); padding:20px; border-radius:var(--radius); overflow:auto; max-height:70vh; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-all;"></pre>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const form = document.getElementById('pdfForm');
+        const uploadArea = document.getElementById('uploadArea');
+        const imageInput = document.getElementById('imageInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const imagePreview = document.getElementById('imagePreview');
+        const generateBtn = document.getElementById('generateBtn');
+        const previewBtn = document.getElementById('previewBtn');
+        const statusBar = document.getElementById('statusBar');
+        const statusText = document.getElementById('statusText');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const iccProfile = document.getElementById('icc_profile');
+        const iccUploadArea = document.getElementById('iccUploadArea');
+        const iccFileInput = document.getElementById('iccFileInput');
+        const iccFileInfo = document.getElementById('iccFileInfo');
+        const addBleed = document.getElementById('add_bleed');
+        const dimensionsDisplay = document.getElementById('dimensionsDisplay');
+        const outputSummary = document.getElementById('outputSummary');
+        const cardType = document.getElementById('card_type');
+        const cardTypeInfo = document.getElementById('cardTypeInfo');
+
+        // File upload handling
+        uploadArea.addEventListener('click', () => imageInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                imageInput.files = e.dataTransfer.files;
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        imageInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            uploadArea.classList.add('has-file');
+            fileInfo.classList.remove('hidden');
+            fileInfo.textContent = `${file.name} (${formatFileSize(file.size)})`;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // ICC Profile upload handling
+        iccUploadArea.addEventListener('click', () => iccFileInput.click());
+        
+        iccFileInput.addEventListener('change', async (e) => {
+            if (e.target.files.length) {
+                const file = e.target.files[0];
+                if (!file.name.toLowerCase().endsWith('.icc')) {
+                    showError('Please select a valid .icc file');
+                    return;
+                }
+                
+                showStatus('Uploading ICC profile...');
+                
+                const formData = new FormData();
+                formData.append('icc_file', file);
+                
+                try {
+                    const response = await fetch('/api/icc-profiles', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to upload ICC profile');
+                    }
+                    
+                    // Update the dropdown with new profiles
+                    updateIccProfileDropdown(data.profiles, data.filename);
+                    
+                    // Show success in upload area
+                    iccUploadArea.classList.add('has-file');
+                    iccFileInfo.classList.remove('hidden');
+                    iccFileInfo.innerHTML = `
+                        <span>✓ Uploaded: ${data.filename}</span>
+                    `;
+                    
+                    showSuccess('ICC profile uploaded successfully!');
+                } catch (error) {
+                    showError(error.message);
+                } finally {
+                    hideStatus();
+                    iccFileInput.value = ''; // Reset file input
+                }
+            }
+        });
+        
+        function updateIccProfileDropdown(profiles, selectedFilename = null) {
+            const currentValue = selectedFilename || iccProfile.value;
+            iccProfile.innerHTML = '<option value="">-- No profile selected --</option>';
+            
+            profiles.forEach(profile => {
+                const option = document.createElement('option');
+                option.value = profile.filename;
+                option.textContent = profile.name;
+                if (profile.filename === currentValue) {
+                    option.selected = true;
+                }
+                iccProfile.appendChild(option);
+            });
+            
+            updateSummary();
+        }
+        
+        // Load ICC profiles on page load
+        async function loadIccProfiles() {
+            try {
+                const response = await fetch('/api/icc-profiles');
+                const data = await response.json();
+                if (data.profiles && data.profiles.length > 0) {
+                    // Keep current selection if exists
+                    const currentValue = iccProfile.value;
+                    updateIccProfileDropdown(data.profiles);
+                    if (currentValue) {
+                        iccProfile.value = currentValue;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load ICC profiles:', error);
+            }
+        }
+        
+        // ICC profile selection change
+        iccProfile.addEventListener('change', () => {
+            updateSummary();
+        });
+
+        // Card type toggle
+        cardType.addEventListener('change', () => {
+            updateCardTypeInfo();
+            updateSummary();
+        });
+
+        function updateCardTypeInfo() {
+            if (cardType.value === 'folded') {
+                cardTypeInfo.innerHTML = `
+                    <h4>Folded Card Layout</h4>
+                    <p>
+                        <strong>Spread 1 (Outside):</strong> Panel 4 (back) | Panel 1 (front cover - your image)<br>
+                        <strong>Spread 2 (Inside):</strong> Panel 2 (inside left) | Panel 3 (inside right)<br>
+                        <em>Each panel: 4.75" × 6.75" | Spread: 9.5" × 6.75"</em>
+                    </p>
+                `;
+            } else {
+                cardTypeInfo.innerHTML = `
+                    <h4>Flat Card Layout</h4>
+                    <p>
+                        <strong>Page 1:</strong> Front (your uploaded image)<br>
+                        <strong>Page 2:</strong> Back (simulated placeholder content)
+                    </p>
+                `;
+            }
+        }
+
+        // Bleed toggle
+        addBleed.addEventListener('change', () => {
+            updateSummary();
+        });
+
+        // Update summary on any change
+        document.querySelectorAll('select, input').forEach(el => {
+            el.addEventListener('change', updateSummary);
+        });
+
+        function updateSummary() {
+            const profile = document.getElementById('pdf_profile').value || 'Default';
+            const icc = iccProfile.selectedIndex > 0 ? iccProfile.options[iccProfile.selectedIndex].text : 'None';
+            const bleed = addBleed.checked;
+            const type = cardType.value;
+            
+            let sizeInfo, pagesInfo;
+            if (type === 'folded') {
+                sizeInfo = bleed ? '9.75" × 7" per spread (with bleed)' : '9.5" × 6.75" per spread';
+                pagesInfo = '2 spreads (4 panels)';
+            } else {
+                sizeInfo = bleed ? '5" × 7" (with bleed)' : '4.75" × 6.75"';
+                pagesInfo = '2 pages (front + back)';
+            }
+            
+            outputSummary.innerHTML = `
+                Profile: <code>${profile}</code><br>
+                ICC: <code>${icc}</code><br>
+                Type: <code>${type === 'folded' ? 'Folded Card' : 'Flat Card'}</code><br>
+                Size: <code>${sizeInfo}</code><br>
+                Trim: <code>4.75" × 6.75"</code> per panel<br>
+                Pages: <code>${pagesInfo}</code><br>
+                Trim marks: <code>${bleed ? 'Yes' : 'No'}</code>
+            `;
+        }
+
+        // Form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!imageInput.files.length) {
+                showError('Please select an image file.');
+                return;
+            }
+
+            showStatus('Generating PDF...');
+            hideMessages();
+
+            const formData = new FormData();
+            formData.append('api_key', document.getElementById('api_key').value);
+            formData.append('image', imageInput.files[0]);
+            formData.append('card_type', cardType.value);
+            formData.append('pdf_profile', document.getElementById('pdf_profile').value);
+            formData.append('icc_profile', iccProfile.value);
+            formData.append('add_bleed', addBleed.checked);
+            formData.append('use_true_black', document.getElementById('use_true_black').checked);
+            formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
+            formData.append('image_fit', document.getElementById('image_fit').value);
+            formData.append('background_color', document.getElementById('background_color').value);
+            formData.append('test_mode', document.getElementById('test_mode').checked);
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Failed to generate PDF');
+                }
+
+                // Download the PDF
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.headers.get('content-disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'output.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+
+                showSuccess('PDF generated successfully! Download started.');
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideStatus();
+            }
+        });
+
+        // HTML Preview
+        previewBtn.addEventListener('click', async () => {
+            if (!imageInput.files.length) {
+                showError('Please select an image file first.');
+                return;
+            }
+
+            showStatus('Generating HTML preview...');
+            hideMessages();
+
+            const formData = new FormData();
+            formData.append('image', imageInput.files[0]);
+            formData.append('card_type', cardType.value);
+            formData.append('pdf_profile', document.getElementById('pdf_profile').value);
+            formData.append('icc_profile', iccProfile.value);
+            formData.append('add_bleed', addBleed.checked);
+            formData.append('use_true_black', document.getElementById('use_true_black').checked);
+            formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
+            formData.append('image_fit', document.getElementById('image_fit').value);
+            formData.append('background_color', document.getElementById('background_color').value);
+
+            try {
+                const response = await fetch('/preview-html', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to generate preview');
+                }
+
+                document.getElementById('htmlPreview').textContent = data.html;
+                document.getElementById('htmlModal').style.display = 'block';
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideStatus();
+            }
+        });
+
+        // UI helpers
+        function showStatus(text) {
+            statusText.textContent = text;
+            statusBar.classList.add('visible');
+            generateBtn.disabled = true;
+            previewBtn.disabled = true;
+        }
+
+        function hideStatus() {
+            statusBar.classList.remove('visible');
+            generateBtn.disabled = false;
+            previewBtn.disabled = false;
+        }
+
+        function showError(text) {
+            errorMessage.textContent = text;
+            errorMessage.classList.add('visible');
+        }
+
+        function showSuccess(text) {
+            successMessage.textContent = text;
+            successMessage.classList.add('visible');
+        }
+
+        function hideMessages() {
+            errorMessage.classList.remove('visible');
+            successMessage.classList.remove('visible');
+        }
+
+        // Close modal on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.getElementById('htmlModal').style.display = 'none';
+            }
+        });
+
+        // Initialize
+        loadIccProfiles();
+    </script>
+</body>
+</html>
