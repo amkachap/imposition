@@ -514,6 +514,50 @@
             padding: 12px;
             text-align: center;
         }
+
+        .upload-area-small {
+            padding: 20px;
+        }
+
+        .upload-icon-small {
+            width: 32px;
+            height: 32px;
+            margin: 0 auto 8px;
+            opacity: 0.5;
+        }
+
+        .upload-text-small {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .upload-text-small strong {
+            color: var(--accent);
+        }
+
+        .image-preview-small {
+            margin-top: 12px;
+            max-width: 100%;
+            max-height: 120px;
+            border-radius: var(--radius);
+            display: none;
+        }
+
+        .label-hint {
+            font-weight: 400;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .multi-image-info {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: var(--radius);
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: var(--warning);
+        }
     </style>
 </head>
 <body>
@@ -545,10 +589,16 @@
                     <div class="form-group">
                         <label for="card_type">Card Template</label>
                         <select id="card_type" name="card_type">
-                            <option value="flat" selected>Flat Card (2 pages: front + back)</option>
+                            <option value="flat" selected>Flat Cards and Invites (2 pages: front + back)</option>
                             <option value="folded">Folded Card (2 spreads: outside + inside)</option>
                         </select>
                     </div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="provide_all_images" name="provide_all_images">
+                        <label for="provide_all_images">Provide All Panel Images</label>
+                    </div>
+                    <p class="checkbox-description" id="allImagesDescription">Upload images for all panels instead of using placeholder content</p>
 
                     <div class="info-box" id="cardTypeInfo">
                         <h4>Flat Card Layout</h4>
@@ -660,17 +710,49 @@
                         <p>Keep images as <strong>sRGB</strong> or <strong>Display P3</strong>. The PDF/X-4 profile preserves RGB with transparency while embedding a CMYK output intent for print compliance.</p>
                     </div>
 
-                    <div class="upload-area" id="uploadArea">
-                        <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                        </svg>
-                        <p class="upload-text">
-                            <strong>Click to upload</strong> or drag and drop<br>
-                            PNG, JPG, TIFF, WebP (max 50MB)
-                        </p>
-                        <input type="file" id="imageInput" name="image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden required>
-                        <div class="file-info hidden" id="fileInfo"></div>
-                        <img id="imagePreview" alt="Preview">
+                    <!-- Front Panel Image (always shown) -->
+                    <div class="form-group">
+                        <label id="frontImageLabel">Front Panel Image</label>
+                        <div class="upload-area" id="uploadArea">
+                            <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                            <p class="upload-text">
+                                <strong>Click to upload</strong> or drag and drop<br>
+                                PNG, JPG, TIFF, WebP (max 50MB)
+                            </p>
+                            <input type="file" id="imageInput" name="image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden required>
+                            <div class="file-info hidden" id="fileInfo"></div>
+                            <img id="imagePreview" alt="Preview">
+                        </div>
+                    </div>
+
+                    <!-- Inside Panel Image (folded cards only, when provide_all_images is checked) -->
+                    <div class="form-group hidden" id="insideImageGroup">
+                        <label>Inside Panel Image <span class="label-hint">(spans both inside left & right)</span></label>
+                        <div class="upload-area upload-area-small" id="insideUploadArea">
+                            <svg class="upload-icon-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                            <p class="upload-text-small"><strong>Click to upload</strong> inside panel image</p>
+                            <input type="file" id="insideImageInput" name="inside_image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden>
+                            <div class="file-info hidden" id="insideFileInfo"></div>
+                            <img id="insideImagePreview" class="image-preview-small" alt="Preview">
+                        </div>
+                    </div>
+
+                    <!-- Back Panel Image (when provide_all_images is checked) -->
+                    <div class="form-group hidden" id="backImageGroup">
+                        <label>Back Panel Image</label>
+                        <div class="upload-area upload-area-small" id="backUploadArea">
+                            <svg class="upload-icon-small" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                            <p class="upload-text-small"><strong>Click to upload</strong> back panel image</p>
+                            <input type="file" id="backImageInput" name="back_image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden>
+                            <div class="file-info hidden" id="backFileInfo"></div>
+                            <img id="backImagePreview" class="image-preview-small" alt="Preview">
+                        </div>
                     </div>
 
                     <div class="btn-group">
@@ -744,6 +826,21 @@
         const outputSummary = document.getElementById('outputSummary');
         const cardType = document.getElementById('card_type');
         const cardTypeInfo = document.getElementById('cardTypeInfo');
+        
+        // Multi-image upload elements
+        const provideAllImages = document.getElementById('provide_all_images');
+        const insideImageGroup = document.getElementById('insideImageGroup');
+        const backImageGroup = document.getElementById('backImageGroup');
+        const insideUploadArea = document.getElementById('insideUploadArea');
+        const insideImageInput = document.getElementById('insideImageInput');
+        const insideFileInfo = document.getElementById('insideFileInfo');
+        const insideImagePreview = document.getElementById('insideImagePreview');
+        const backUploadArea = document.getElementById('backUploadArea');
+        const backImageInput = document.getElementById('backImageInput');
+        const backFileInfo = document.getElementById('backFileInfo');
+        const backImagePreview = document.getElementById('backImagePreview');
+        const frontImageLabel = document.getElementById('frontImageLabel');
+        const allImagesDescription = document.getElementById('allImagesDescription');
 
         // File upload handling
         uploadArea.addEventListener('click', () => imageInput.click());
@@ -790,6 +887,100 @@
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
             return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Inside image upload handling
+        insideUploadArea.addEventListener('click', () => insideImageInput.click());
+        insideUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            insideUploadArea.classList.add('dragover');
+        });
+        insideUploadArea.addEventListener('dragleave', () => insideUploadArea.classList.remove('dragover'));
+        insideUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            insideUploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                insideImageInput.files = e.dataTransfer.files;
+                handleSecondaryFileSelect(e.dataTransfer.files[0], insideUploadArea, insideFileInfo, insideImagePreview);
+            }
+        });
+        insideImageInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleSecondaryFileSelect(e.target.files[0], insideUploadArea, insideFileInfo, insideImagePreview);
+            }
+        });
+
+        // Back image upload handling
+        backUploadArea.addEventListener('click', () => backImageInput.click());
+        backUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            backUploadArea.classList.add('dragover');
+        });
+        backUploadArea.addEventListener('dragleave', () => backUploadArea.classList.remove('dragover'));
+        backUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            backUploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                backImageInput.files = e.dataTransfer.files;
+                handleSecondaryFileSelect(e.dataTransfer.files[0], backUploadArea, backFileInfo, backImagePreview);
+            }
+        });
+        backImageInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleSecondaryFileSelect(e.target.files[0], backUploadArea, backFileInfo, backImagePreview);
+            }
+        });
+
+        function handleSecondaryFileSelect(file, uploadAreaEl, fileInfoEl, previewEl) {
+            uploadAreaEl.classList.add('has-file');
+            fileInfoEl.classList.remove('hidden');
+            fileInfoEl.textContent = `${file.name} (${formatFileSize(file.size)})`;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewEl.src = e.target.result;
+                previewEl.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Provide all images checkbox handling
+        provideAllImages.addEventListener('change', updateImageUploadVisibility);
+        
+        function updateImageUploadVisibility() {
+            const showAllImages = provideAllImages.checked;
+            const isFolded = cardType.value === 'folded';
+            
+            if (showAllImages) {
+                // Show back image for both card types
+                backImageGroup.classList.remove('hidden');
+                backImageInput.required = true;
+                
+                // Show inside image only for folded cards
+                if (isFolded) {
+                    insideImageGroup.classList.remove('hidden');
+                    insideImageInput.required = true;
+                } else {
+                    insideImageGroup.classList.add('hidden');
+                    insideImageInput.required = false;
+                }
+                
+                // Update description
+                if (isFolded) {
+                    allImagesDescription.textContent = 'Required: Front, Inside (spans both panels), and Back images';
+                } else {
+                    allImagesDescription.textContent = 'Required: Front and Back images';
+                }
+            } else {
+                // Hide additional upload areas
+                insideImageGroup.classList.add('hidden');
+                backImageGroup.classList.add('hidden');
+                insideImageInput.required = false;
+                backImageInput.required = false;
+                allImagesDescription.textContent = 'Upload images for all panels instead of using placeholder content';
+            }
+            
+            updateSummary();
         }
 
         // ICC Profile upload handling
@@ -883,6 +1074,7 @@
         // Card type toggle
         cardType.addEventListener('change', () => {
             updateCardTypeInfo();
+            updateImageUploadVisibility();
             updateSummary();
         });
 
@@ -922,23 +1114,27 @@
             const icc = iccProfile.selectedIndex > 0 ? iccProfile.options[iccProfile.selectedIndex].text : 'None';
             const bleed = addBleed.checked;
             const type = cardType.value;
+            const allImages = provideAllImages.checked;
             
-            let sizeInfo, pagesInfo;
+            let sizeInfo, pagesInfo, imagesInfo;
             if (type === 'folded') {
                 sizeInfo = bleed ? '9.75" × 7" per spread (with bleed)' : '9.5" × 6.75" per spread';
                 pagesInfo = '2 spreads (4 panels)';
+                imagesInfo = allImages ? 'Front, Inside, Back (user provided)' : 'Front only (placeholders for others)';
             } else {
                 sizeInfo = bleed ? '5" × 7" (with bleed)' : '4.75" × 6.75"';
                 pagesInfo = '2 pages (front + back)';
+                imagesInfo = allImages ? 'Front, Back (user provided)' : 'Front only (placeholder for back)';
             }
             
             outputSummary.innerHTML = `
                 Profile: <code>${profile}</code><br>
                 ICC: <code>${icc}</code><br>
-                Type: <code>${type === 'folded' ? 'Folded Card' : 'Flat Card'}</code><br>
+                Type: <code>${type === 'folded' ? 'Folded Card' : 'Flat Cards/Invites'}</code><br>
                 Size: <code>${sizeInfo}</code><br>
                 Trim: <code>4.75" × 6.75"</code> per panel<br>
                 Pages: <code>${pagesInfo}</code><br>
+                Images: <code>${imagesInfo}</code><br>
                 Trim marks: <code>${bleed ? 'Yes' : 'No'}</code>
             `;
         }
@@ -948,8 +1144,20 @@
             e.preventDefault();
             
             if (!imageInput.files.length) {
-                showError('Please select an image file.');
+                showError('Please select a front panel image.');
                 return;
+            }
+            
+            // Validate additional images if provide_all_images is checked
+            if (provideAllImages.checked) {
+                if (!backImageInput.files.length) {
+                    showError('Please select a back panel image.');
+                    return;
+                }
+                if (cardType.value === 'folded' && !insideImageInput.files.length) {
+                    showError('Please select an inside panel image.');
+                    return;
+                }
             }
 
             showStatus('Generating PDF...');
@@ -967,6 +1175,17 @@
             formData.append('image_fit', document.getElementById('image_fit').value);
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
+            formData.append('provide_all_images', provideAllImages.checked);
+            
+            // Add additional images if checkbox is checked
+            if (provideAllImages.checked) {
+                if (backImageInput.files.length) {
+                    formData.append('back_image', backImageInput.files[0]);
+                }
+                if (cardType.value === 'folded' && insideImageInput.files.length) {
+                    formData.append('inside_image', insideImageInput.files[0]);
+                }
+            }
 
             try {
                 const response = await fetch('/generate', {
@@ -1001,8 +1220,20 @@
         // HTML Preview
         previewBtn.addEventListener('click', async () => {
             if (!imageInput.files.length) {
-                showError('Please select an image file first.');
+                showError('Please select a front panel image first.');
                 return;
+            }
+            
+            // Validate additional images if provide_all_images is checked
+            if (provideAllImages.checked) {
+                if (!backImageInput.files.length) {
+                    showError('Please select a back panel image.');
+                    return;
+                }
+                if (cardType.value === 'folded' && !insideImageInput.files.length) {
+                    showError('Please select an inside panel image.');
+                    return;
+                }
             }
 
             showStatus('Generating HTML preview...');
@@ -1018,6 +1249,17 @@
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
             formData.append('image_fit', document.getElementById('image_fit').value);
             formData.append('background_color', document.getElementById('background_color').value);
+            formData.append('provide_all_images', provideAllImages.checked);
+            
+            // Add additional images if checkbox is checked
+            if (provideAllImages.checked) {
+                if (backImageInput.files.length) {
+                    formData.append('back_image', backImageInput.files[0]);
+                }
+                if (cardType.value === 'folded' && insideImageInput.files.length) {
+                    formData.append('inside_image', insideImageInput.files[0]);
+                }
+            }
 
             try {
                 const response = await fetch('/preview-html', {

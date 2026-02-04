@@ -314,7 +314,7 @@ def get_common_styles():
     """
 
 
-def generate_flat_card_html(image_data, image_type, settings):
+def generate_flat_card_html(image_data, image_type, settings, back_image_data=None, back_image_type=None):
     """Generate HTML for flat card (2 pages: front and back)."""
     
     # Card dimensions (trim size)
@@ -332,6 +332,12 @@ def generate_flat_card_html(image_data, image_type, settings):
     
     # Marks: crop only (no cross/registration marks)
     marks = 'crop' if bleed > 0 else 'none'
+    
+    # Determine back panel content
+    if back_image_data and back_image_type:
+        back_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back">'
+    else:
+        back_content = BACK_PANEL_CONTENT
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -405,10 +411,10 @@ def generate_flat_card_html(image_data, image_type, settings):
         </div>
     </div>
     
-    <!-- Page 2: Back (simulated content) -->
+    <!-- Page 2: Back -->
     <div class="page">
         <div class="back-page-content">
-            {BACK_PANEL_CONTENT}
+            {back_content}
         </div>
     </div>
 </body>
@@ -417,7 +423,7 @@ def generate_flat_card_html(image_data, image_type, settings):
     return html
 
 
-def generate_folded_card_html(image_data, image_type, settings):
+def generate_folded_card_html(image_data, image_type, settings, inside_image_data=None, inside_image_type=None, back_image_data=None, back_image_type=None):
     """Generate HTML for folded card (2 spreads: outside and inside)."""
     
     # Single panel dimensions (trim size)
@@ -439,6 +445,25 @@ def generate_folded_card_html(image_data, image_type, settings):
     
     # Marks: crop only (no cross/registration marks)
     marks = 'crop' if bleed > 0 else 'none'
+    
+    # Determine back panel content (Panel 4)
+    if back_image_data and back_image_type:
+        back_panel_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Back Cover">'
+    else:
+        back_panel_content = PANEL_4_CONTENT
+    
+    # Determine inside panel content (spans both Panel 2 and Panel 3)
+    if inside_image_data and inside_image_type:
+        # Single image spans both inside panels
+        inside_left_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Left" style="object-position: right center;">'
+        inside_right_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Right" style="object-position: left center;">'
+        # No fold indicator needed when using custom inside images
+        inside_fold_indicator = ''
+    else:
+        inside_left_content = INSIDE_LEFT_CONTENT
+        inside_right_content = INSIDE_RIGHT_CONTENT
+        # Show fold indicator for placeholder content
+        inside_fold_indicator = '<div class="fold-indicator"></div>'
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -531,7 +556,7 @@ def generate_folded_card_html(image_data, image_type, settings):
             <!-- Panel 4: Back Cover (left side of spread) -->
             <div class="panel">
                 <div class="panel-inner">
-                    {PANEL_4_CONTENT}
+                    {back_panel_content}
                 </div>
             </div>
             <!-- Panel 1: Front Cover (right side of spread) - uploaded image -->
@@ -550,17 +575,17 @@ def generate_folded_card_html(image_data, image_type, settings):
             <!-- Panel 2: Inside Left -->
             <div class="panel">
                 <div class="panel-inner">
-                    {INSIDE_LEFT_CONTENT}
+                    {inside_left_content}
                 </div>
             </div>
             <!-- Panel 3: Inside Right -->
             <div class="panel">
                 <div class="panel-inner">
-                    {INSIDE_RIGHT_CONTENT}
+                    {inside_right_content}
                 </div>
             </div>
         </div>
-        <div class="fold-indicator"></div>
+        {inside_fold_indicator}
     </div>
 </body>
 </html>"""
@@ -568,15 +593,40 @@ def generate_folded_card_html(image_data, image_type, settings):
     return html
 
 
-def generate_html_for_image(image_data, image_type, settings):
-    """Generate HTML document for DocRaptor based on card type."""
+def generate_html_for_image(image_data, image_type, settings, additional_images=None):
+    """Generate HTML document for DocRaptor based on card type.
     
+    Args:
+        image_data: Base64 encoded front image data
+        image_type: MIME type of front image
+        settings: Dictionary of settings
+        additional_images: Dictionary with optional 'back' and 'inside' image data
+            - back: {'data': base64_data, 'type': image_type}
+            - inside: {'data': base64_data, 'type': image_type}
+    """
+    additional_images = additional_images or {}
     card_type = settings.get('card_type', 'flat')
     
+    # Extract additional image data
+    back_data = additional_images.get('back', {}).get('data')
+    back_type = additional_images.get('back', {}).get('type')
+    inside_data = additional_images.get('inside', {}).get('data')
+    inside_type = additional_images.get('inside', {}).get('type')
+    
     if card_type == 'folded':
-        return generate_folded_card_html(image_data, image_type, settings)
+        return generate_folded_card_html(
+            image_data, image_type, settings,
+            inside_image_data=inside_data,
+            inside_image_type=inside_type,
+            back_image_data=back_data,
+            back_image_type=back_type
+        )
     else:
-        return generate_flat_card_html(image_data, image_type, settings)
+        return generate_flat_card_html(
+            image_data, image_type, settings,
+            back_image_data=back_data,
+            back_image_type=back_type
+        )
 
 
 def create_pdf(html_content, settings, api_key):
@@ -699,11 +749,37 @@ def generate_pdf():
     if not allowed_file(file.filename):
         return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
     
-    # Read and encode the image
+    # Read and encode the front image
     image_data = base64.b64encode(file.read()).decode('utf-8')
     image_type = file.filename.rsplit('.', 1)[1].lower()
     if image_type == 'jpg':
         image_type = 'jpeg'
+    
+    # Process additional images if provide_all_images is checked
+    additional_images = {}
+    provide_all = request.form.get('provide_all_images') == 'true'
+    card_type = request.form.get('card_type', 'flat')
+    
+    if provide_all:
+        # Get back image
+        if 'back_image' in request.files:
+            back_file = request.files['back_image']
+            if back_file.filename != '' and allowed_file(back_file.filename):
+                back_data = base64.b64encode(back_file.read()).decode('utf-8')
+                back_type = back_file.filename.rsplit('.', 1)[1].lower()
+                if back_type == 'jpg':
+                    back_type = 'jpeg'
+                additional_images['back'] = {'data': back_data, 'type': back_type}
+        
+        # Get inside image (only for folded cards)
+        if card_type == 'folded' and 'inside_image' in request.files:
+            inside_file = request.files['inside_image']
+            if inside_file.filename != '' and allowed_file(inside_file.filename):
+                inside_data = base64.b64encode(inside_file.read()).decode('utf-8')
+                inside_type = inside_file.filename.rsplit('.', 1)[1].lower()
+                if inside_type == 'jpg':
+                    inside_type = 'jpeg'
+                additional_images['inside'] = {'data': inside_data, 'type': inside_type}
     
     # Get ICC profile - either from new upload or existing saved profile
     icc_base64 = None
@@ -726,7 +802,7 @@ def generate_pdf():
     
     # Build settings from form
     settings = {
-        'card_type': request.form.get('card_type', 'flat'),
+        'card_type': card_type,
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,  # Base64 encoded ICC file
         'add_bleed': request.form.get('add_bleed') == 'true',
@@ -739,7 +815,7 @@ def generate_pdf():
     }
     
     # Generate HTML
-    html_content = generate_html_for_image(image_data, image_type, settings)
+    html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
     
     # Create PDF
     pdf_content, error = create_pdf(html_content, settings, api_key)
@@ -777,11 +853,37 @@ def preview_html():
     if not allowed_file(file.filename):
         return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
     
-    # Read and encode the image
+    # Read and encode the front image
     image_data = base64.b64encode(file.read()).decode('utf-8')
     image_type = file.filename.rsplit('.', 1)[1].lower()
     if image_type == 'jpg':
         image_type = 'jpeg'
+    
+    # Process additional images if provide_all_images is checked
+    additional_images = {}
+    provide_all = request.form.get('provide_all_images') == 'true'
+    card_type = request.form.get('card_type', 'flat')
+    
+    if provide_all:
+        # Get back image
+        if 'back_image' in request.files:
+            back_file = request.files['back_image']
+            if back_file.filename != '' and allowed_file(back_file.filename):
+                back_data = base64.b64encode(back_file.read()).decode('utf-8')
+                back_type = back_file.filename.rsplit('.', 1)[1].lower()
+                if back_type == 'jpg':
+                    back_type = 'jpeg'
+                additional_images['back'] = {'data': back_data, 'type': back_type}
+        
+        # Get inside image (only for folded cards)
+        if card_type == 'folded' and 'inside_image' in request.files:
+            inside_file = request.files['inside_image']
+            if inside_file.filename != '' and allowed_file(inside_file.filename):
+                inside_data = base64.b64encode(inside_file.read()).decode('utf-8')
+                inside_type = inside_file.filename.rsplit('.', 1)[1].lower()
+                if inside_type == 'jpg':
+                    inside_type = 'jpeg'
+                additional_images['inside'] = {'data': inside_data, 'type': inside_type}
     
     # Get ICC profile from selected existing profile
     icc_base64 = None
@@ -791,7 +893,7 @@ def preview_html():
     
     # Build settings from form
     settings = {
-        'card_type': request.form.get('card_type', 'flat'),
+        'card_type': card_type,
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,
         'add_bleed': request.form.get('add_bleed') == 'true',
@@ -802,7 +904,7 @@ def preview_html():
     }
     
     # Generate HTML
-    html_content = generate_html_for_image(image_data, image_type, settings)
+    html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
     
     return jsonify({'html': html_content})
 
