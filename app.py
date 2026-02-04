@@ -750,6 +750,7 @@ def generate_pdf():
         return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
     
     # Read and encode the front image
+    front_image_name = os.path.splitext(secure_filename(file.filename))[0]  # Get name without extension
     image_data = base64.b64encode(file.read()).decode('utf-8')
     image_type = file.filename.rsplit('.', 1)[1].lower()
     if image_type == 'jpg':
@@ -824,7 +825,8 @@ def generate_pdf():
         return jsonify({'error': f'DocRaptor API error: {error}'}), 500
     
     # Save PDF to temp file and return
-    output_filename = f"output_{settings['pdf_profile'].replace('/', '-') if settings['pdf_profile'] else 'default'}.pdf"
+    pdf_profile_name = settings['pdf_profile'].replace('/', '-') if settings['pdf_profile'] else 'default'
+    output_filename = f"{front_image_name}_{pdf_profile_name}.pdf"
     temp_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
     
     with open(temp_path, 'wb') as f:
