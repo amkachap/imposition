@@ -2,3 +2,5 @@ flask>=2.3.0
 docraptor>=2.0.0
 werkzeug>=2.3.0
 gunicorn>=21.0.0
+colorthief>=0.2.1
+pillow>=10.0.0

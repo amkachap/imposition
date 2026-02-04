@@ -6,9 +6,11 @@ A Flask application to test different PDF output settings using DocRaptor API.
 import os
 import base64
 import tempfile
+from io import BytesIO
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
 import docraptor
+from colorthief import ColorThief
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
@@ -61,6 +63,24 @@ def get_icc_profile_base64(profile_name):
         with open(filepath, 'rb') as f:
             return base64.b64encode(f.read()).decode('utf-8')
     return None
+
+def get_dominant_color(image_data_base64):
+    """Extract dominant color from base64 image data.
+    
+    Args:
+        image_data_base64: Base64 encoded image data
+        
+    Returns:
+        RGB color string like 'rgb(R, G, B)'
+    """
+    try:
+        image_bytes = base64.b64decode(image_data_base64)
+        color_thief = ColorThief(BytesIO(image_bytes))
+        dominant_color = color_thief.get_color(quality=10)  # Returns (R, G, B)
+        return f"rgb({dominant_color[0]}, {dominant_color[1]}, {dominant_color[2]})"
+    except Exception as e:
+        print(f"Error extracting dominant color: {e}")
+        return "rgb(245, 245, 240)"  # Fallback to off-white
 
 # PDF profiles available in DocRaptor/Prince
 PDF_PROFILES = [
@@ -450,7 +470,9 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     if back_image_data and back_image_type:
         back_panel_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Back Cover">'
     else:
-        back_panel_content = PANEL_4_CONTENT
+        # Extract dominant color from front panel image for Panel 4 background
+        dominant_color = get_dominant_color(image_data)
+        back_panel_content = f'<div style="width: 100%; height: 100%; background-color: {dominant_color};"></div>'
     
     # Determine inside panel content (spans both Panel 2 and Panel 3)
     if inside_image_data and inside_image_type:

@@ -941,23 +941,19 @@
             const isFolded = cardType.value === 'folded';
             
             if (showAllImages) {
-                // Show back image for both card types
-                backImageGroup.classList.remove('hidden');
-                backImageInput.required = true;
-                
-                // Show inside image only for folded cards
                 if (isFolded) {
+                    // For folded cards: only show inside image (back panel is auto-generated with dominant color)
                     insideImageGroup.classList.remove('hidden');
                     insideImageInput.required = true;
+                    backImageGroup.classList.add('hidden');
+                    backImageInput.required = false;
+                    allImagesDescription.textContent = 'Required: Front and Inside (spans both panels) images. Back panel will be auto-generated with dominant color from front.';
                 } else {
+                    // For flat cards: show back image only
+                    backImageGroup.classList.remove('hidden');
+                    backImageInput.required = true;
                     insideImageGroup.classList.add('hidden');
                     insideImageInput.required = false;
-                }
-                
-                // Update description
-                if (isFolded) {
-                    allImagesDescription.textContent = 'Required: Front, Inside (spans both panels), and Back images';
-                } else {
                     allImagesDescription.textContent = 'Required: Front and Back images';
                 }
             } else {
@@ -1109,7 +1105,7 @@
             if (type === 'folded') {
                 sizeInfo = bleed ? '9.75" × 7" per spread (with bleed)' : '9.5" × 6.75" per spread';
                 pagesInfo = '2 spreads (4 panels)';
-                imagesInfo = allImages ? 'Front, Inside, Back (user provided)' : 'Front only (placeholders for others)';
+                imagesInfo = allImages ? 'Front, Inside (user provided), Back (auto-generated)' : 'Front only (placeholders for others)';
             } else {
                 sizeInfo = bleed ? '5" × 7" (with bleed)' : '4.75" × 6.75"';
                 pagesInfo = '2 pages (front + back)';
@@ -1139,13 +1135,18 @@
             
             // Validate additional images if provide_all_images is checked
             if (provideAllImages.checked) {
-                if (!backImageInput.files.length) {
-                    showError('Please select a back panel image.');
-                    return;
-                }
-                if (cardType.value === 'folded' && !insideImageInput.files.length) {
-                    showError('Please select an inside panel image.');
-                    return;
+                if (cardType.value === 'folded') {
+                    // Folded cards: inside image required, back is auto-generated
+                    if (!insideImageInput.files.length) {
+                        showError('Please select an inside panel image.');
+                        return;
+                    }
+                } else {
+                    // Flat cards: back image required
+                    if (!backImageInput.files.length) {
+                        showError('Please select a back panel image.');
+                        return;
+                    }
                 }
             }
 
@@ -1215,13 +1216,18 @@
             
             // Validate additional images if provide_all_images is checked
             if (provideAllImages.checked) {
-                if (!backImageInput.files.length) {
-                    showError('Please select a back panel image.');
-                    return;
-                }
-                if (cardType.value === 'folded' && !insideImageInput.files.length) {
-                    showError('Please select an inside panel image.');
-                    return;
+                if (cardType.value === 'folded') {
+                    // Folded cards: inside image required, back is auto-generated
+                    if (!insideImageInput.files.length) {
+                        showError('Please select an inside panel image.');
+                        return;
+                    }
+                } else {
+                    // Flat cards: back image required
+                    if (!backImageInput.files.length) {
+                        showError('Please select a back panel image.');
+                        return;
+                    }
                 }
             }
 
