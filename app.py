@@ -476,9 +476,9 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     
     # Determine inside panel content (spans both Panel 2 and Panel 3)
     if inside_image_data and inside_image_type:
-        # Single image spans both inside panels
-        inside_left_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Left" style="object-position: right center;">'
-        inside_right_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Right" style="object-position: left center;">'
+        # Single image spans both inside panels - left panel shows left half, right panel shows right half
+        inside_left_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Left" style="object-position: left center;">'
+        inside_right_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Right" style="object-position: right center;">'
         # No fold indicator needed when using custom inside images
         inside_fold_indicator = ''
     else:
