@@ -594,12 +594,6 @@
                         </select>
                     </div>
 
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="provide_all_images" name="provide_all_images">
-                        <label for="provide_all_images">Provide All Panel Images</label>
-                    </div>
-                    <p class="checkbox-description" id="allImagesDescription">Upload images for all panels instead of using placeholder content</p>
-
                     <div class="info-box" id="cardTypeInfo">
                         <h4>Flat Card Layout</h4>
                         <p>
@@ -675,20 +669,9 @@
                     </div>
                     <p class="checkbox-description">Extends image 0.125" beyond trim on all sides. Trim marks at 4.75" × 6.75"</p>
 
-                    <div class="two-col">
-                        <div class="form-group">
-                            <label for="image_fit">Image Fit Mode</label>
-                            <select id="image_fit" name="image_fit">
-                                <option value="cover" selected>Cover (fill, may crop)</option>
-                                <option value="contain">Contain (fit, may letterbox)</option>
-                                <option value="fill">Fill (stretch)</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="background_color">Background Color</label>
-                            <input type="color" id="background_color" name="background_color" value="#ffffff">
-                        </div>
+                    <div class="form-group">
+                        <label for="background_color">Background Color</label>
+                        <input type="color" id="background_color" name="background_color" value="#ffffff">
                     </div>
 
                     <hr>
@@ -709,6 +692,12 @@
                         <h4>PDF/X-4 Recommended Workflow</h4>
                         <p>Keep images as <strong>sRGB</strong> or <strong>Display P3</strong>. The PDF/X-4 profile preserves RGB with transparency while embedding a CMYK output intent for print compliance.</p>
                     </div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="provide_all_images" name="provide_all_images">
+                        <label for="provide_all_images">Provide All Panel Images</label>
+                    </div>
+                    <p class="checkbox-description" id="allImagesDescription">Upload images for all panels instead of using placeholder content</p>
 
                     <!-- Front Panel Image (always shown) -->
                     <div class="form-group">
@@ -1172,7 +1161,7 @@
             formData.append('add_bleed', addBleed.checked);
             formData.append('use_true_black', document.getElementById('use_true_black').checked);
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
-            formData.append('image_fit', document.getElementById('image_fit').value);
+            formData.append('image_fit', 'cover');
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
@@ -1247,7 +1236,7 @@
             formData.append('add_bleed', addBleed.checked);
             formData.append('use_true_black', document.getElementById('use_true_black').checked);
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
-            formData.append('image_fit', document.getElementById('image_fit').value);
+            formData.append('image_fit', 'cover');
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('provide_all_images', provideAllImages.checked);
             
