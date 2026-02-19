@@ -667,7 +667,13 @@
                         <input type="checkbox" id="add_bleed" name="add_bleed" checked>
                         <label for="add_bleed">Add 1/8" Bleed</label>
                     </div>
-                    <p class="checkbox-description">Extends image 0.125" beyond trim on all sides. Trim marks at 4.75" × 6.75"</p>
+                    <p class="checkbox-description">Extends image 0.125" beyond trim on all sides</p>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="include_crop_marks" name="include_crop_marks">
+                        <label for="include_crop_marks">Include Crop Marks</label>
+                    </div>
+                    <p class="checkbox-description">Adds trim marks outside the bleed area. Disable if your printer uses TrimBox/BleedBox metadata.</p>
 
                     <div class="form-group">
                         <label for="background_color">Background Color</label>
@@ -771,7 +777,8 @@
                             Size: <code>5" × 7" (with bleed)</code><br>
                             Trim: <code>4.75" × 6.75"</code> per panel<br>
                             Pages: <code>2 pages (front + back)</code><br>
-                            Trim marks: <code>Yes</code>
+                            Bleed: <code>1/8"</code><br>
+                            Crop marks: <code>No</code>
                         </p>
                     </div>
                 </div>
@@ -942,22 +949,21 @@
             
             if (showAllImages) {
                 if (isFolded) {
-                    // For folded cards: only show inside image (back panel is auto-generated with dominant color)
                     insideImageGroup.classList.remove('hidden');
                     insideImageInput.required = true;
-                    backImageGroup.classList.add('hidden');
+                    backImageGroup.classList.remove('hidden');
                     backImageInput.required = false;
-                    allImagesDescription.textContent = 'Required: Front and Inside (spans both panels) images. Back panel will be auto-generated with dominant color from front.';
+                    document.querySelector('#backImageGroup label').innerHTML = 'Back Panel Image <span class="label-hint">(optional — defaults to dominant color from front)</span>';
+                    allImagesDescription.textContent = 'Required: Front and Inside images. Back panel is optional (auto-generated with dominant color if not provided).';
                 } else {
-                    // For flat cards: show back image only
                     backImageGroup.classList.remove('hidden');
                     backImageInput.required = true;
+                    document.querySelector('#backImageGroup label').innerHTML = 'Back Panel Image';
                     insideImageGroup.classList.add('hidden');
                     insideImageInput.required = false;
                     allImagesDescription.textContent = 'Required: Front and Back images';
                 }
             } else {
-                // Hide additional upload areas
                 insideImageGroup.classList.add('hidden');
                 backImageGroup.classList.add('hidden');
                 insideImageInput.required = false;
@@ -1098,6 +1104,7 @@
             const profile = document.getElementById('pdf_profile').value || 'Default';
             const icc = iccProfile.selectedIndex > 0 ? iccProfile.options[iccProfile.selectedIndex].text : 'None';
             const bleed = addBleed.checked;
+            const cropMarks = document.getElementById('include_crop_marks').checked;
             const type = cardType.value;
             const allImages = provideAllImages.checked;
             
@@ -1105,7 +1112,12 @@
             if (type === 'folded') {
                 sizeInfo = bleed ? '9.75" × 7" per spread (with bleed)' : '9.5" × 6.75" per spread';
                 pagesInfo = '2 spreads (4 panels)';
-                imagesInfo = allImages ? 'Front, Inside (user provided), Back (auto-generated)' : 'Front only (placeholders for others)';
+                if (allImages) {
+                    const hasBack = backImageInput.files.length > 0;
+                    imagesInfo = hasBack ? 'Front, Inside, Back (user provided)' : 'Front, Inside (user provided), Back (auto-generated)';
+                } else {
+                    imagesInfo = 'Front only (placeholders for others)';
+                }
             } else {
                 sizeInfo = bleed ? '5" × 7" (with bleed)' : '4.75" × 6.75"';
                 pagesInfo = '2 pages (front + back)';
@@ -1120,7 +1132,8 @@
                 Trim: <code>4.75" × 6.75"</code> per panel<br>
                 Pages: <code>${pagesInfo}</code><br>
                 Images: <code>${imagesInfo}</code><br>
-                Trim marks: <code>${bleed ? 'Yes' : 'No'}</code>
+                Bleed: <code>${bleed ? '1/8"' : 'None'}</code><br>
+                Crop marks: <code>${cropMarks && bleed ? 'Yes' : 'No'}</code>
             `;
         }
 
@@ -1136,13 +1149,11 @@
             // Validate additional images if provide_all_images is checked
             if (provideAllImages.checked) {
                 if (cardType.value === 'folded') {
-                    // Folded cards: inside image required, back is auto-generated
                     if (!insideImageInput.files.length) {
                         showError('Please select an inside panel image.');
                         return;
                     }
                 } else {
-                    // Flat cards: back image required
                     if (!backImageInput.files.length) {
                         showError('Please select a back panel image.');
                         return;
@@ -1160,6 +1171,7 @@
             formData.append('pdf_profile', document.getElementById('pdf_profile').value);
             formData.append('icc_profile', iccProfile.value);
             formData.append('add_bleed', addBleed.checked);
+            formData.append('include_crop_marks', document.getElementById('include_crop_marks').checked);
             formData.append('use_true_black', document.getElementById('use_true_black').checked);
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
             formData.append('image_fit', 'cover');
@@ -1167,7 +1179,6 @@
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
             
-            // Add additional images if checkbox is checked
             if (provideAllImages.checked) {
                 if (backImageInput.files.length) {
                     formData.append('back_image', backImageInput.files[0]);
@@ -1240,13 +1251,13 @@
             formData.append('pdf_profile', document.getElementById('pdf_profile').value);
             formData.append('icc_profile', iccProfile.value);
             formData.append('add_bleed', addBleed.checked);
+            formData.append('include_crop_marks', document.getElementById('include_crop_marks').checked);
             formData.append('use_true_black', document.getElementById('use_true_black').checked);
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
             formData.append('image_fit', 'cover');
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('provide_all_images', provideAllImages.checked);
             
-            // Add additional images if checkbox is checked
             if (provideAllImages.checked) {
                 if (backImageInput.files.length) {
                     formData.append('back_image', backImageInput.files[0]);

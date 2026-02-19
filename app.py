@@ -350,8 +350,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     fit_mode = settings.get('image_fit', 'cover')
     bg_color = settings.get('background_color', '#ffffff')
     
-    # Marks: crop only (no cross/registration marks)
-    marks = 'crop' if bleed > 0 else 'none'
+    marks = 'crop' if settings.get('include_crop_marks', False) and bleed > 0 else 'none'
     
     # Determine back panel content
     if back_image_data and back_image_type:
@@ -371,6 +370,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             margin: 0;
             bleed: {bleed}in;
             marks: {marks};
+            prince-pdf-page-colorspace: rgb;
         }}
         
         {get_common_styles()}
@@ -463,8 +463,7 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     fit_mode = settings.get('image_fit', 'cover')
     bg_color = settings.get('background_color', '#ffffff')
     
-    # Marks: crop only (no cross/registration marks)
-    marks = 'crop' if bleed > 0 else 'none'
+    marks = 'crop' if settings.get('include_crop_marks', False) and bleed > 0 else 'none'
     
     # Determine back panel content (Panel 4)
     if back_image_data and back_image_type:
@@ -499,6 +498,7 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
             margin: 0;
             bleed: {bleed}in;
             marks: {marks};
+            prince-pdf-page-colorspace: rgb;
         }}
         
         {get_common_styles()}
@@ -829,6 +829,7 @@ def generate_pdf():
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,  # Base64 encoded ICC file
         'add_bleed': request.form.get('add_bleed') == 'true',
+        'include_crop_marks': request.form.get('include_crop_marks') == 'true',
         'use_true_black': request.form.get('use_true_black') == 'true',
         'use_cmyk_colors': request.form.get('use_cmyk_colors') == 'true',
         'force_cmyk': request.form.get('force_cmyk') == 'true',
@@ -921,6 +922,7 @@ def preview_html():
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,
         'add_bleed': request.form.get('add_bleed') == 'true',
+        'include_crop_marks': request.form.get('include_crop_marks') == 'true',
         'use_true_black': request.form.get('use_true_black') == 'true',
         'use_cmyk_colors': request.form.get('use_cmyk_colors') == 'true',
         'image_fit': request.form.get('image_fit', 'cover'),
