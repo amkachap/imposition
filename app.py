@@ -352,10 +352,15 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     
     marks = 'crop' if settings.get('include_crop_marks', False) and bleed > 0 else 'none'
     
-    # Determine back panel content
+    # Extract dominant colors for bleed area backgrounds
+    front_dominant = get_dominant_color(image_data)
+    
+    # Determine back panel content and background
     if back_image_data and back_image_type:
-        back_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back">'
+        back_dominant = get_dominant_color(back_image_data)
+        back_content = f'<div class="trim-area"><img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back"></div>'
     else:
+        back_dominant = bg_color
         back_content = BACK_PANEL_CONTENT
     
     html = f"""<!DOCTYPE html>
@@ -392,14 +397,12 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             page-break-after: avoid;
         }}
         
-        /* Content box extends into bleed area using negative positioning */
         .page-content {{
             position: absolute;
             top: -{bleed}in;
             left: -{bleed}in;
             width: {total_width}in;
             height: {total_height}in;
-            background-color: {bg_color};
         }}
         
         .image {{
@@ -416,24 +419,34 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             left: -{bleed}in;
             width: {total_width}in;
             height: {total_height}in;
-            background-color: {bg_color};
             display: flex;
             align-items: center;
             justify-content: center;
+        }}
+        
+        .trim-area {{
+            position: absolute;
+            left: {bleed}in;
+            top: {bleed}in;
+            width: {card_width}in;
+            height: {card_height}in;
+            overflow: hidden;
         }}
     </style>
 </head>
 <body>
     <!-- Page 1: Front (uploaded image) -->
     <div class="page">
-        <div class="page-content">
-            <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Card Front">
+        <div class="page-content" style="background-color: {front_dominant};">
+            <div class="trim-area">
+                <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Card Front">
+            </div>
         </div>
     </div>
     
     <!-- Page 2: Back -->
     <div class="page">
-        <div class="back-page-content">
+        <div class="back-page-content" style="background-color: {back_dominant};">
             {back_content}
         </div>
     </div>
@@ -465,25 +478,27 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     
     marks = 'crop' if settings.get('include_crop_marks', False) and bleed > 0 else 'none'
     
+    # Extract dominant colors for bleed area backgrounds
+    front_dominant = get_dominant_color(image_data)
+    
     # Determine back panel content (Panel 4)
     if back_image_data and back_image_type:
-        back_panel_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Back Cover">'
+        back_dominant = get_dominant_color(back_image_data)
+        back_panel_content = f'<div class="trim-area"><img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Back Cover"></div>'
     else:
-        # Extract dominant color from front panel image for Panel 4 background
-        dominant_color = get_dominant_color(image_data)
-        back_panel_content = f'<div style="width: 100%; height: 100%; background-color: {dominant_color};"></div>'
+        back_dominant = front_dominant
+        back_panel_content = ''
     
     # Determine inside panel content (spans both Panel 2 and Panel 3)
     if inside_image_data and inside_image_type:
-        # Single image spans both inside panels - left panel shows left half, right panel shows right half
-        inside_left_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Left" style="object-position: left center;">'
-        inside_right_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Right" style="object-position: right center;">'
-        # No fold indicator needed when using custom inside images
+        inside_dominant = get_dominant_color(inside_image_data)
+        inside_left_content = f'<div class="trim-area"><img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Left" style="object-position: left center;"></div>'
+        inside_right_content = f'<div class="trim-area"><img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Right" style="object-position: right center;"></div>'
         inside_fold_indicator = ''
     else:
+        inside_dominant = bg_color
         inside_left_content = INSIDE_LEFT_CONTENT
         inside_right_content = INSIDE_RIGHT_CONTENT
-        # Show fold indicator for placeholder content
         inside_fold_indicator = '<div class="fold-indicator"></div>'
     
     html = f"""<!DOCTYPE html>
@@ -547,7 +562,6 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
             align-items: center;
             justify-content: center;
             position: relative;
-            background-color: {bg_color};
         }}
         
         .image {{
@@ -556,6 +570,23 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
             object-fit: {fit_mode};
             object-position: center;
             display: block;
+        }}
+        
+        /* Trim area: images placed at trim size, bleed filled by panel background */
+        .trim-area {{
+            position: absolute;
+            top: {bleed}in;
+            width: {panel_width}in;
+            height: {panel_height}in;
+            overflow: hidden;
+        }}
+        
+        .panel-left .trim-area {{
+            left: {bleed}in;
+        }}
+        
+        .panel-right .trim-area {{
+            left: 0;
         }}
         
         /* Fold line indicator (visual guide on trim, very subtle) */
@@ -576,15 +607,15 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     <div class="spread">
         <div class="spread-content">
             <!-- Panel 4: Back Cover (left side of spread) -->
-            <div class="panel">
-                <div class="panel-inner">
+            <div class="panel panel-left">
+                <div class="panel-inner" style="background-color: {back_dominant};">
                     {back_panel_content}
                 </div>
             </div>
-            <!-- Panel 1: Front Cover (right side of spread) - uploaded image -->
-            <div class="panel">
-                <div class="panel-inner">
-                    <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Front Cover">
+            <!-- Panel 1: Front Cover (right side of spread) -->
+            <div class="panel panel-right">
+                <div class="panel-inner" style="background-color: {front_dominant};">
+                    <div class="trim-area"><img class="image" src="data:image/{image_type};base64,{image_data}" alt="Front Cover"></div>
                 </div>
             </div>
         </div>
@@ -595,14 +626,14 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     <div class="spread">
         <div class="spread-content">
             <!-- Panel 2: Inside Left -->
-            <div class="panel">
-                <div class="panel-inner">
+            <div class="panel panel-left">
+                <div class="panel-inner" style="background-color: {inside_dominant};">
                     {inside_left_content}
                 </div>
             </div>
             <!-- Panel 3: Inside Right -->
-            <div class="panel">
-                <div class="panel-inner">
+            <div class="panel panel-right">
+                <div class="panel-inner" style="background-color: {inside_dominant};">
                     {inside_right_content}
                 </div>
             </div>
