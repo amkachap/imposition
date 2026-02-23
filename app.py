@@ -616,7 +616,11 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
 
 
 def generate_envelope_html(image_data, image_type, settings):
-    """Generate HTML for A7 envelope front panel with USPS zone compliance."""
+    """Generate HTML for A7 envelope front panel with USPS zone compliance.
+    
+    image_data and image_type can be None if no background image is provided;
+    the envelope will have a transparent background (ink-only output).
+    """
     
     # A7 envelope dimensions (trim size, landscape)
     env_width = 7.25   # inches
@@ -656,6 +660,30 @@ def generate_envelope_html(image_data, image_type, settings):
     # Google Fonts import for the selected font
     font_import = f"@import url('https://fonts.googleapis.com/css2?family={font_family.replace(' ', '+')}:wght@400;700&display=swap');"
     
+    # Background: image if provided, otherwise transparent
+    if image_data and image_type:
+        bg_html = f'''<div class="envelope-bg">
+            <img src="data:image/{image_type};base64,{image_data}" alt="Envelope Background">
+        </div>'''
+        bg_css = f""".envelope-bg {{
+            position: absolute;
+            top: -{bleed}in;
+            left: -{bleed}in;
+            width: {total_width}in;
+            height: {total_height}in;
+        }}
+        
+        .envelope-bg img {{
+            width: 100%;
+            height: 100%;
+            object-fit: {fit_mode};
+            object-position: center;
+            display: block;
+        }}"""
+    else:
+        bg_html = ''
+        bg_css = ''
+    
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -678,6 +706,7 @@ def generate_envelope_html(image_data, image_type, settings):
         html, body {{
             margin: 0;
             padding: 0;
+            background: transparent;
         }}
         
         .envelope {{
@@ -685,25 +714,11 @@ def generate_envelope_html(image_data, image_type, settings):
             width: {env_width}in;
             height: {env_height}in;
             overflow: visible;
+            background: transparent;
         }}
         
-        .envelope-bg {{
-            position: absolute;
-            top: -{bleed}in;
-            left: -{bleed}in;
-            width: {total_width}in;
-            height: {total_height}in;
-        }}
+        {bg_css}
         
-        .envelope-bg img {{
-            width: 100%;
-            height: 100%;
-            object-fit: {fit_mode};
-            object-position: center;
-            display: block;
-        }}
-        
-        /* All address overlays positioned relative to trim area */
         .envelope-content {{
             position: absolute;
             top: 0;
@@ -712,22 +727,6 @@ def generate_envelope_html(image_data, image_type, settings):
             height: {env_height}in;
             font-family: '{font_family}', cursive, sans-serif;
             color: {text_color};
-        }}
-        
-        /* Zone 1: Postage / Indicia - upper right 1.5" x 1.5" */
-        .zone-postage {{
-            position: absolute;
-            top: 0.25in;
-            right: 0.25in;
-            width: 1.0in;
-            height: 1.0in;
-            border: 1px dashed rgba(0,0,0,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 8pt;
-            color: rgba(0,0,0,0.3);
-            font-family: 'DM Sans', sans-serif;
         }}
         
         /* Zone 2: Return address - upper left, within top 2.5", max 3.625" wide */
@@ -746,7 +745,6 @@ def generate_envelope_html(image_data, image_type, settings):
         }}
         
         /* Zone 3: OCR Read Area (Delivery) */
-        /* 0.5" from each edge, 2.75" from bottom to 0.625" from bottom */
         .zone-delivery {{
             position: absolute;
             left: 0.5in;
@@ -762,27 +760,17 @@ def generate_envelope_html(image_data, image_type, settings):
         }}
         
         /* Zone 4: Barcode clear - bottom 0.625", right 4.75" - NO INK */
-        /* This is enforced by keeping delivery address above it */
     </style>
 </head>
 <body>
     <div class="envelope">
-        <!-- Background image extends into bleed -->
-        <div class="envelope-bg">
-            <img src="data:image/{image_type};base64,{image_data}" alt="Envelope Background">
-        </div>
+        {bg_html}
         
-        <!-- Content overlays on trim area -->
         <div class="envelope-content">
-            <!-- Zone 1: Postage placeholder -->
-            <div class="zone-postage">STAMP</div>
-            
-            <!-- Zone 2: Return Address -->
             <div class="zone-return">
                 {return_lines}
             </div>
             
-            <!-- Zone 3: Delivery Address (OCR Read Area) -->
             <div class="zone-delivery">
                 {delivery_lines}
             </div>
@@ -941,28 +929,30 @@ def generate_pdf():
     if not api_key:
         return jsonify({'error': 'DocRaptor API key is required'}), 400
     
-    # Get uploaded image
-    if 'image' not in request.files:
+    card_type = request.form.get('card_type', 'flat')
+    
+    # Get uploaded image (optional for envelope)
+    image_data = None
+    image_type = None
+    front_image_name = 'envelope'
+    
+    has_image = 'image' in request.files and request.files['image'].filename != ''
+    
+    if has_image:
+        file = request.files['image']
+        if not allowed_file(file.filename):
+            return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
+        front_image_name = os.path.splitext(secure_filename(file.filename))[0]
+        image_data = base64.b64encode(file.read()).decode('utf-8')
+        image_type = file.filename.rsplit('.', 1)[1].lower()
+        if image_type == 'jpg':
+            image_type = 'jpeg'
+    elif card_type != 'envelope':
         return jsonify({'error': 'No image file provided'}), 400
-    
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': 'No image file selected'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
-    
-    # Read and encode the front image
-    front_image_name = os.path.splitext(secure_filename(file.filename))[0]  # Get name without extension
-    image_data = base64.b64encode(file.read()).decode('utf-8')
-    image_type = file.filename.rsplit('.', 1)[1].lower()
-    if image_type == 'jpg':
-        image_type = 'jpeg'
     
     # Process additional images if provide_all_images is checked
     additional_images = {}
     provide_all = request.form.get('provide_all_images') == 'true'
-    card_type = request.form.get('card_type', 'flat')
     
     if provide_all:
         # Get back image
@@ -1059,27 +1049,28 @@ def generate_pdf():
 def preview_html():
     """Preview the generated HTML without calling DocRaptor."""
     
-    # Get uploaded image
-    if 'image' not in request.files:
+    card_type = request.form.get('card_type', 'flat')
+    
+    # Get uploaded image (optional for envelope)
+    image_data = None
+    image_type = None
+    
+    has_image = 'image' in request.files and request.files['image'].filename != ''
+    
+    if has_image:
+        file = request.files['image']
+        if not allowed_file(file.filename):
+            return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
+        image_data = base64.b64encode(file.read()).decode('utf-8')
+        image_type = file.filename.rsplit('.', 1)[1].lower()
+        if image_type == 'jpg':
+            image_type = 'jpeg'
+    elif card_type != 'envelope':
         return jsonify({'error': 'No image file provided'}), 400
-    
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': 'No image file selected'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
-    
-    # Read and encode the front image
-    image_data = base64.b64encode(file.read()).decode('utf-8')
-    image_type = file.filename.rsplit('.', 1)[1].lower()
-    if image_type == 'jpg':
-        image_type = 'jpeg'
     
     # Process additional images if provide_all_images is checked
     additional_images = {}
     provide_all = request.form.get('provide_all_images') == 'true'
-    card_type = request.form.get('card_type', 'flat')
     
     if provide_all:
         # Get back image

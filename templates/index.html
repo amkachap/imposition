@@ -1059,7 +1059,7 @@ SOMEWHERE, ST 67890</textarea>
                 backImageGroup.classList.add('hidden');
                 insideImageInput.required = false;
                 backImageInput.required = false;
-                frontImageLabel.textContent = 'Envelope Background Image';
+                frontImageLabel.innerHTML = 'Envelope Background Image <span class="label-hint">(optional — transparent if not provided)</span>';
             } else {
                 envelopeSettings.classList.add('hidden');
                 provideAllImages.closest('.checkbox-group').classList.remove('hidden');
@@ -1255,7 +1255,8 @@ SOMEWHERE, ST 67890</textarea>
                 pagesInfo = '1 page (front only)';
                 trimInfo = '7.25" × 5.25" (landscape)';
                 typeLabel = 'Envelope A7';
-                imagesInfo = 'Background image + text addressing';
+                const hasBg = imageInput.files.length > 0;
+                imagesInfo = hasBg ? 'Background image + text addressing' : 'Text addressing only (transparent bg)';
             } else {
                 sizeInfo = bleed ? '5" × 7" (with bleed)' : '4.75" × 6.75"';
                 pagesInfo = '2 pages (front + back)';
@@ -1281,8 +1282,8 @@ SOMEWHERE, ST 67890</textarea>
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            if (!imageInput.files.length) {
-                showError(cardType.value === 'envelope' ? 'Please select an envelope background image.' : 'Please select a front panel image.');
+            if (!imageInput.files.length && cardType.value !== 'envelope') {
+                showError('Please select a front panel image.');
                 return;
             }
             
@@ -1369,8 +1370,8 @@ SOMEWHERE, ST 67890</textarea>
 
         // HTML Preview
         previewBtn.addEventListener('click', async () => {
-            if (!imageInput.files.length) {
-                showError(cardType.value === 'envelope' ? 'Please select an envelope background image.' : 'Please select a front panel image first.');
+            if (!imageInput.files.length && cardType.value !== 'envelope') {
+                showError('Please select a front panel image first.');
                 return;
             }
             
