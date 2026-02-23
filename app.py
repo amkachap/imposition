@@ -747,9 +747,9 @@ def generate_envelope_html(image_data, image_type, settings):
         /* Zone 3: OCR Read Area (Delivery) */
         .zone-delivery {{
             position: absolute;
-            left: 2.25in;
+            left: 3.0in;
             bottom: 1.25in;
-            width: 4.5in;
+            width: 3.75in;
             font-size: 11pt;
             line-height: 1.6;
         }}
