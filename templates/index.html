@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DocRaptor PDF Output Tester</title>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@400;700&family=Patrick+Hand&family=Indie+Flower&family=Architects+Daughter&family=Shadows+Into+Light&family=Kalam:wght@400;700&family=Handlee&family=Coming+Soon&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-primary: #0a0a0b;
@@ -558,6 +558,47 @@
             font-size: 13px;
             color: var(--warning);
         }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        textarea.form-input {
+            resize: vertical;
+            min-height: 56px;
+        }
+
+        .font-preview {
+            background: #ffffff;
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-top: 8px;
+        }
+
+        .font-preview-label {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 8px;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .font-preview-text {
+            color: #000;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -591,6 +632,7 @@
                         <select id="card_type" name="card_type">
                             <option value="flat" selected>Flat Cards and Invites (2 pages: front + back)</option>
                             <option value="folded">Folded Card (2 spreads: outside + inside)</option>
+                            <option value="envelope">Envelope A7 (single page front)</option>
                         </select>
                     </div>
 
@@ -750,6 +792,60 @@
                         </div>
                     </div>
 
+                    <!-- Envelope Settings (shown only when envelope type is selected) -->
+                    <div id="envelopeSettings" class="hidden">
+                        <hr>
+                        <div class="section-header">Envelope Addressing</div>
+
+                        <div class="form-group">
+                            <label for="envelope_font">Font Style</label>
+                            <select id="envelope_font" name="envelope_font">
+                                <option value="Caveat" style="font-family: 'Caveat'">Caveat</option>
+                                <option value="Patrick Hand" style="font-family: 'Patrick Hand'">Patrick Hand</option>
+                                <option value="Indie Flower" style="font-family: 'Indie Flower'">Indie Flower</option>
+                                <option value="Architects Daughter" style="font-family: 'Architects Daughter'">Architects Daughter</option>
+                                <option value="Shadows Into Light" style="font-family: 'Shadows Into Light'">Shadows Into Light</option>
+                                <option value="Kalam" style="font-family: 'Kalam'">Kalam</option>
+                                <option value="Handlee" style="font-family: 'Handlee'">Handlee</option>
+                                <option value="Coming Soon" style="font-family: 'Coming Soon'">Coming Soon</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="envelope_text_color">Text Color</label>
+                            <input type="color" id="envelope_text_color" name="envelope_text_color" value="#000000">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="return_name">Return Address — Name</label>
+                            <input type="text" id="return_name" name="return_name" value="JOHN DOE" class="form-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="return_address">Return Address</label>
+                            <textarea id="return_address" name="return_address" rows="2" class="form-input">123 MAIN STREET
+ANYTOWN, ST 12345</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="delivery_name">Delivery Address — Name</label>
+                            <input type="text" id="delivery_name" name="delivery_name" value="JANE SMITH" class="form-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="delivery_address">Delivery Address</label>
+                            <textarea id="delivery_address" name="delivery_address" rows="2" class="form-input">456 OAK AVENUE APT 2B
+SOMEWHERE, ST 67890</textarea>
+                        </div>
+
+                        <div class="font-preview" id="fontPreview">
+                            <p class="font-preview-label">Font Preview:</p>
+                            <p class="font-preview-text" id="fontPreviewText" style="font-family: 'Caveat'; font-size: 18px;">
+                                JANE SMITH<br>456 OAK AVENUE APT 2B<br>SOMEWHERE, ST 67890
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="btn-group">
                         <button type="submit" class="btn btn-primary" id="generateBtn">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -837,6 +933,12 @@
         const backImagePreview = document.getElementById('backImagePreview');
         const frontImageLabel = document.getElementById('frontImageLabel');
         const allImagesDescription = document.getElementById('allImagesDescription');
+        
+        // Envelope elements
+        const envelopeSettings = document.getElementById('envelopeSettings');
+        const envelopeFont = document.getElementById('envelope_font');
+        const envelopeTextColor = document.getElementById('envelope_text_color');
+        const fontPreviewText = document.getElementById('fontPreviewText');
 
         // File upload handling
         uploadArea.addEventListener('click', () => imageInput.click());
@@ -946,29 +1048,47 @@
         function updateImageUploadVisibility() {
             const showAllImages = provideAllImages.checked;
             const isFolded = cardType.value === 'folded';
+            const isEnvelope = cardType.value === 'envelope';
             
-            if (showAllImages) {
-                if (isFolded) {
-                    insideImageGroup.classList.remove('hidden');
-                    insideImageInput.required = true;
-                    backImageGroup.classList.remove('hidden');
-                    backImageInput.required = false;
-                    document.querySelector('#backImageGroup label').innerHTML = 'Back Panel Image <span class="label-hint">(optional — defaults to dominant color from front)</span>';
-                    allImagesDescription.textContent = 'Required: Front and Inside images. Back panel is optional (auto-generated with dominant color if not provided).';
-                } else {
-                    backImageGroup.classList.remove('hidden');
-                    backImageInput.required = true;
-                    document.querySelector('#backImageGroup label').innerHTML = 'Back Panel Image';
-                    insideImageGroup.classList.add('hidden');
-                    insideImageInput.required = false;
-                    allImagesDescription.textContent = 'Required: Front and Back images';
-                }
-            } else {
+            // Toggle envelope settings visibility
+            if (isEnvelope) {
+                envelopeSettings.classList.remove('hidden');
+                provideAllImages.closest('.checkbox-group').classList.add('hidden');
+                document.getElementById('allImagesDescription').classList.add('hidden');
                 insideImageGroup.classList.add('hidden');
                 backImageGroup.classList.add('hidden');
                 insideImageInput.required = false;
                 backImageInput.required = false;
-                allImagesDescription.textContent = 'Upload images for all panels instead of using placeholder content';
+                frontImageLabel.textContent = 'Envelope Background Image';
+            } else {
+                envelopeSettings.classList.add('hidden');
+                provideAllImages.closest('.checkbox-group').classList.remove('hidden');
+                document.getElementById('allImagesDescription').classList.remove('hidden');
+                frontImageLabel.textContent = 'Front Panel Image';
+                
+                if (showAllImages) {
+                    if (isFolded) {
+                        insideImageGroup.classList.remove('hidden');
+                        insideImageInput.required = true;
+                        backImageGroup.classList.remove('hidden');
+                        backImageInput.required = false;
+                        document.querySelector('#backImageGroup label').innerHTML = 'Back Panel Image <span class="label-hint">(optional — defaults to dominant color from front)</span>';
+                        allImagesDescription.textContent = 'Required: Front and Inside images. Back panel is optional (auto-generated with dominant color if not provided).';
+                    } else {
+                        backImageGroup.classList.remove('hidden');
+                        backImageInput.required = true;
+                        document.querySelector('#backImageGroup label').innerHTML = 'Back Panel Image';
+                        insideImageGroup.classList.add('hidden');
+                        insideImageInput.required = false;
+                        allImagesDescription.textContent = 'Required: Front and Back images';
+                    }
+                } else {
+                    insideImageGroup.classList.add('hidden');
+                    backImageGroup.classList.add('hidden');
+                    insideImageInput.required = false;
+                    backImageInput.required = false;
+                    allImagesDescription.textContent = 'Upload images for all panels instead of using placeholder content';
+                }
             }
             
             updateSummary();
@@ -1079,6 +1199,16 @@
                         <em>Each panel: 4.75" × 6.75" | Spread: 9.5" × 6.75"</em>
                     </p>
                 `;
+            } else if (cardType.value === 'envelope') {
+                cardTypeInfo.innerHTML = `
+                    <h4>Envelope A7 Layout</h4>
+                    <p>
+                        <strong>Single page:</strong> Front panel with background image<br>
+                        <strong>Trim:</strong> 7.25" × 5.25" (landscape)<br>
+                        <strong>With bleed:</strong> 7.5" × 5.5"<br>
+                        <em>USPS zones: return address, delivery address, postage, barcode clear</em>
+                    </p>
+                `;
             } else {
                 cardTypeInfo.innerHTML = `
                     <h4>Flat Card Layout</h4>
@@ -1108,28 +1238,38 @@
             const type = cardType.value;
             const allImages = provideAllImages.checked;
             
-            let sizeInfo, pagesInfo, imagesInfo;
+            let sizeInfo, pagesInfo, imagesInfo, trimInfo, typeLabel;
             if (type === 'folded') {
                 sizeInfo = bleed ? '9.75" × 7" per spread (with bleed)' : '9.5" × 6.75" per spread';
                 pagesInfo = '2 spreads (4 panels)';
+                trimInfo = '4.75" × 6.75" per panel';
+                typeLabel = 'Folded Card';
                 if (allImages) {
                     const hasBack = backImageInput.files.length > 0;
                     imagesInfo = hasBack ? 'Front, Inside, Back (user provided)' : 'Front, Inside (user provided), Back (auto-generated)';
                 } else {
                     imagesInfo = 'Front only (placeholders for others)';
                 }
+            } else if (type === 'envelope') {
+                sizeInfo = bleed ? '7.5" × 5.5" (with bleed)' : '7.25" × 5.25"';
+                pagesInfo = '1 page (front only)';
+                trimInfo = '7.25" × 5.25" (landscape)';
+                typeLabel = 'Envelope A7';
+                imagesInfo = 'Background image + text addressing';
             } else {
                 sizeInfo = bleed ? '5" × 7" (with bleed)' : '4.75" × 6.75"';
                 pagesInfo = '2 pages (front + back)';
+                trimInfo = '4.75" × 6.75"';
+                typeLabel = 'Flat Cards/Invites';
                 imagesInfo = allImages ? 'Front, Back (user provided)' : 'Front only (placeholder for back)';
             }
             
             outputSummary.innerHTML = `
                 Profile: <code>${profile}</code><br>
                 ICC: <code>${icc}</code><br>
-                Type: <code>${type === 'folded' ? 'Folded Card' : 'Flat Cards/Invites'}</code><br>
+                Type: <code>${typeLabel}</code><br>
                 Size: <code>${sizeInfo}</code><br>
-                Trim: <code>4.75" × 6.75"</code> per panel<br>
+                Trim: <code>${trimInfo}</code><br>
                 Pages: <code>${pagesInfo}</code><br>
                 Images: <code>${imagesInfo}</code><br>
                 Bleed: <code>${bleed ? '1/8"' : 'None'}</code><br>
@@ -1142,12 +1282,12 @@
             e.preventDefault();
             
             if (!imageInput.files.length) {
-                showError('Please select a front panel image.');
+                showError(cardType.value === 'envelope' ? 'Please select an envelope background image.' : 'Please select a front panel image.');
                 return;
             }
             
-            // Validate additional images if provide_all_images is checked
-            if (provideAllImages.checked) {
+            // Validate additional images if provide_all_images is checked (not for envelope)
+            if (cardType.value !== 'envelope' && provideAllImages.checked) {
                 if (cardType.value === 'folded') {
                     if (!insideImageInput.files.length) {
                         showError('Please select an inside panel image.');
@@ -1178,6 +1318,15 @@
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
+            
+            if (cardType.value === 'envelope') {
+                formData.append('return_name', document.getElementById('return_name').value);
+                formData.append('return_address', document.getElementById('return_address').value);
+                formData.append('delivery_name', document.getElementById('delivery_name').value);
+                formData.append('delivery_address', document.getElementById('delivery_address').value);
+                formData.append('envelope_text_color', envelopeTextColor.value);
+                formData.append('envelope_font', envelopeFont.value);
+            }
             
             if (provideAllImages.checked) {
                 if (backImageInput.files.length) {
@@ -1221,20 +1370,18 @@
         // HTML Preview
         previewBtn.addEventListener('click', async () => {
             if (!imageInput.files.length) {
-                showError('Please select a front panel image first.');
+                showError(cardType.value === 'envelope' ? 'Please select an envelope background image.' : 'Please select a front panel image first.');
                 return;
             }
             
-            // Validate additional images if provide_all_images is checked
-            if (provideAllImages.checked) {
+            // Validate additional images if provide_all_images is checked (not for envelope)
+            if (cardType.value !== 'envelope' && provideAllImages.checked) {
                 if (cardType.value === 'folded') {
-                    // Folded cards: inside image required, back is auto-generated
                     if (!insideImageInput.files.length) {
                         showError('Please select an inside panel image.');
                         return;
                     }
                 } else {
-                    // Flat cards: back image required
                     if (!backImageInput.files.length) {
                         showError('Please select a back panel image.');
                         return;
@@ -1257,6 +1404,15 @@
             formData.append('image_fit', 'cover');
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('provide_all_images', provideAllImages.checked);
+            
+            if (cardType.value === 'envelope') {
+                formData.append('return_name', document.getElementById('return_name').value);
+                formData.append('return_address', document.getElementById('return_address').value);
+                formData.append('delivery_name', document.getElementById('delivery_name').value);
+                formData.append('delivery_address', document.getElementById('delivery_address').value);
+                formData.append('envelope_text_color', envelopeTextColor.value);
+                formData.append('envelope_font', envelopeFont.value);
+            }
             
             if (provideAllImages.checked) {
                 if (backImageInput.files.length) {
@@ -1323,6 +1479,24 @@
                 document.getElementById('htmlModal').style.display = 'none';
             }
         });
+
+        // Envelope font/color preview
+        envelopeFont.addEventListener('change', updateFontPreview);
+        envelopeTextColor.addEventListener('input', updateFontPreview);
+        
+        function updateFontPreview() {
+            const font = envelopeFont.value;
+            const color = envelopeTextColor.value;
+            fontPreviewText.style.fontFamily = `'${font}', cursive, sans-serif`;
+            fontPreviewText.style.color = color;
+            
+            const name = document.getElementById('delivery_name').value || 'JANE SMITH';
+            const addr = document.getElementById('delivery_address').value || '456 OAK AVENUE APT 2B\nSOMEWHERE, ST 67890';
+            fontPreviewText.innerHTML = name + '<br>' + addr.replace(/\n/g, '<br>');
+        }
+        
+        document.getElementById('delivery_name').addEventListener('input', updateFontPreview);
+        document.getElementById('delivery_address').addEventListener('input', updateFontPreview);
 
         // Initialize
         loadIccProfiles();

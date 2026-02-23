@@ -615,6 +615,185 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     return html
 
 
+def generate_envelope_html(image_data, image_type, settings):
+    """Generate HTML for A7 envelope front panel with USPS zone compliance."""
+    
+    # A7 envelope dimensions (trim size, landscape)
+    env_width = 7.25   # inches
+    env_height = 5.25  # inches
+    bleed = 0.125 if settings.get('add_bleed', False) else 0
+    
+    total_width = env_width + (bleed * 2)
+    total_height = env_height + (bleed * 2)
+    
+    prince_pdf_block = get_prince_pdf_css(settings)
+    fit_mode = settings.get('image_fit', 'cover')
+    marks = 'crop' if settings.get('include_crop_marks', False) and bleed > 0 else 'none'
+    
+    # Envelope-specific settings
+    envelope = settings.get('envelope', {})
+    return_name = envelope.get('return_name', 'JOHN DOE')
+    return_address = envelope.get('return_address', '123 MAIN STREET\nANYTOWN, ST 12345')
+    delivery_name = envelope.get('delivery_name', 'JANE SMITH')
+    delivery_address = envelope.get('delivery_address', '456 OAK AVENUE APT 2B\nSOMEWHERE, ST 67890')
+    text_color = envelope.get('text_color', '#000000')
+    font_family = envelope.get('font_family', 'Caveat')
+    
+    # Build return address lines
+    return_lines = f'<div class="address-name">{return_name}</div>'
+    for line in return_address.split('\n'):
+        line = line.strip()
+        if line:
+            return_lines += f'<div>{line}</div>'
+    
+    # Build delivery address lines
+    delivery_lines = f'<div class="address-name">{delivery_name}</div>'
+    for line in delivery_address.split('\n'):
+        line = line.strip()
+        if line:
+            delivery_lines += f'<div>{line}</div>'
+    
+    # Google Fonts import for the selected font
+    font_import = f"@import url('https://fonts.googleapis.com/css2?family={font_family.replace(' ', '+')}:wght@400;700&display=swap');"
+    
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        {font_import}
+        
+        {prince_pdf_block}
+        
+        @page {{
+            size: {env_width}in {env_height}in;
+            margin: 0;
+            bleed: {bleed}in;
+            marks: {marks};
+            prince-pdf-page-colorspace: rgb;
+        }}
+        
+        {get_common_styles()}
+        
+        html, body {{
+            margin: 0;
+            padding: 0;
+        }}
+        
+        .envelope {{
+            position: relative;
+            width: {env_width}in;
+            height: {env_height}in;
+            overflow: visible;
+        }}
+        
+        .envelope-bg {{
+            position: absolute;
+            top: -{bleed}in;
+            left: -{bleed}in;
+            width: {total_width}in;
+            height: {total_height}in;
+        }}
+        
+        .envelope-bg img {{
+            width: 100%;
+            height: 100%;
+            object-fit: {fit_mode};
+            object-position: center;
+            display: block;
+        }}
+        
+        /* All address overlays positioned relative to trim area */
+        .envelope-content {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: {env_width}in;
+            height: {env_height}in;
+            font-family: '{font_family}', cursive, sans-serif;
+            color: {text_color};
+        }}
+        
+        /* Zone 1: Postage / Indicia - upper right 1.5" x 1.5" */
+        .zone-postage {{
+            position: absolute;
+            top: 0.25in;
+            right: 0.25in;
+            width: 1.0in;
+            height: 1.0in;
+            border: 1px dashed rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8pt;
+            color: rgba(0,0,0,0.3);
+            font-family: 'DM Sans', sans-serif;
+        }}
+        
+        /* Zone 2: Return address - upper left, within top 2.5", max 3.625" wide */
+        .zone-return {{
+            position: absolute;
+            top: 0.375in;
+            left: 0.5in;
+            max-width: 3.125in;
+            font-size: 11pt;
+            line-height: 1.5;
+        }}
+        
+        .zone-return .address-name {{
+            font-weight: 700;
+            margin-bottom: 2pt;
+        }}
+        
+        /* Zone 3: OCR Read Area (Delivery) */
+        /* 0.5" from each edge, 2.75" from bottom to 0.625" from bottom */
+        .zone-delivery {{
+            position: absolute;
+            left: 0.5in;
+            bottom: 0.75in;
+            width: 6.25in;
+            font-size: 14pt;
+            line-height: 1.6;
+        }}
+        
+        .zone-delivery .address-name {{
+            font-weight: 700;
+            margin-bottom: 2pt;
+        }}
+        
+        /* Zone 4: Barcode clear - bottom 0.625", right 4.75" - NO INK */
+        /* This is enforced by keeping delivery address above it */
+    </style>
+</head>
+<body>
+    <div class="envelope">
+        <!-- Background image extends into bleed -->
+        <div class="envelope-bg">
+            <img src="data:image/{image_type};base64,{image_data}" alt="Envelope Background">
+        </div>
+        
+        <!-- Content overlays on trim area -->
+        <div class="envelope-content">
+            <!-- Zone 1: Postage placeholder -->
+            <div class="zone-postage">STAMP</div>
+            
+            <!-- Zone 2: Return Address -->
+            <div class="zone-return">
+                {return_lines}
+            </div>
+            
+            <!-- Zone 3: Delivery Address (OCR Read Area) -->
+            <div class="zone-delivery">
+                {delivery_lines}
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
+    
+    return html
+
+
 def generate_html_for_image(image_data, image_type, settings, additional_images=None):
     """Generate HTML document for DocRaptor based on card type.
     
@@ -643,6 +822,8 @@ def generate_html_for_image(image_data, image_type, settings, additional_images=
             back_image_data=back_data,
             back_image_type=back_type
         )
+    elif card_type == 'envelope':
+        return generate_envelope_html(image_data, image_type, settings)
     else:
         return generate_flat_card_html(
             image_data, image_type, settings,
@@ -838,6 +1019,17 @@ def generate_pdf():
         'test_mode': request.form.get('test_mode') == 'true',
     }
     
+    # Envelope-specific settings
+    if card_type == 'envelope':
+        settings['envelope'] = {
+            'return_name': request.form.get('return_name', 'JOHN DOE'),
+            'return_address': request.form.get('return_address', '123 MAIN STREET\nANYTOWN, ST 12345'),
+            'delivery_name': request.form.get('delivery_name', 'JANE SMITH'),
+            'delivery_address': request.form.get('delivery_address', '456 OAK AVENUE APT 2B\nSOMEWHERE, ST 67890'),
+            'text_color': request.form.get('envelope_text_color', '#000000'),
+            'font_family': request.form.get('envelope_font', 'Caveat'),
+        }
+    
     # Generate HTML
     html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
     
@@ -928,6 +1120,17 @@ def preview_html():
         'image_fit': request.form.get('image_fit', 'cover'),
         'background_color': request.form.get('background_color', '#ffffff'),
     }
+    
+    # Envelope-specific settings
+    if card_type == 'envelope':
+        settings['envelope'] = {
+            'return_name': request.form.get('return_name', 'JOHN DOE'),
+            'return_address': request.form.get('return_address', '123 MAIN STREET\nANYTOWN, ST 12345'),
+            'delivery_name': request.form.get('delivery_name', 'JANE SMITH'),
+            'delivery_address': request.form.get('delivery_address', '456 OAK AVENUE APT 2B\nSOMEWHERE, ST 67890'),
+            'text_color': request.form.get('envelope_text_color', '#000000'),
+            'font_family': request.form.get('envelope_font', 'Caveat'),
+        }
     
     # Generate HTML
     html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
