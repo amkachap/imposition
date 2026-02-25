@@ -10,7 +10,8 @@ from io import BytesIO
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
 import docraptor
-from colorthief import ColorThief
+from PIL import Image
+from collections import Counter
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
@@ -64,23 +65,52 @@ def get_icc_profile_base64(profile_name):
             return base64.b64encode(f.read()).decode('utf-8')
     return None
 
-def get_dominant_color(image_data_base64):
-    """Extract dominant color from base64 image data.
+def get_dominant_color(image_data_base64, border_pct=0.12):
+    """Extract dominant color by sampling the outer edges of the image.
     
-    Args:
-        image_data_base64: Base64 encoded image data
-        
-    Returns:
-        RGB color string like 'rgb(R, G, B)'
+    Analyzes only the outermost border pixels (default 12% on each side)
+    to find the background color, ignoring central artwork. Colors are
+    quantized to reduce noise from gradients and compression artifacts.
     """
     try:
         image_bytes = base64.b64decode(image_data_base64)
-        color_thief = ColorThief(BytesIO(image_bytes))
-        dominant_color = color_thief.get_color(quality=10)  # Returns (R, G, B)
-        return f"rgb({dominant_color[0]}, {dominant_color[1]}, {dominant_color[2]})"
+        img = Image.open(BytesIO(image_bytes)).convert('RGB')
+        w, h = img.size
+        
+        bx = max(int(w * border_pct), 1)
+        by = max(int(h * border_pct), 1)
+        
+        edge_pixels = []
+        for region in [
+            img.crop((0, 0, w, by)),           # top strip
+            img.crop((0, h - by, w, h)),       # bottom strip
+            img.crop((0, by, bx, h - by)),     # left strip
+            img.crop((w - bx, by, w, h - by)), # right strip
+        ]:
+            edge_pixels.extend(region.getdata())
+        
+        # Quantize to 8-level bins to group similar colors
+        quantized = [
+            (r >> 5 << 5, g >> 5 << 5, b >> 5 << 5)
+            for r, g, b in edge_pixels
+        ]
+        
+        most_common_bin = Counter(quantized).most_common(1)[0][0]
+        
+        # Average the original pixels that fall into the winning bin
+        matching = [
+            (r, g, b) for (r, g, b), (qr, qg, qb)
+            in zip(edge_pixels, quantized)
+            if (qr, qg, qb) == most_common_bin
+        ]
+        avg_r = sum(r for r, _, _ in matching) // len(matching)
+        avg_g = sum(g for _, g, _ in matching) // len(matching)
+        avg_b = sum(b for _, _, b in matching) // len(matching)
+        
+        return f"rgb({avg_r}, {avg_g}, {avg_b})"
     except Exception as e:
         print(f"Error extracting dominant color: {e}")
-        return "rgb(245, 245, 240)"  # Fallback to off-white
+        return "rgb(245, 245, 240)"
 
 # PDF profiles available in DocRaptor/Prince
 PDF_PROFILES = [
