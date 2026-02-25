@@ -1,6 +1,6 @@
 """
 DocRaptor PDF Output Tester
-A Flask application to test different PDF output settings using DocRaptor API.
+Flask app for print-ready PDFs (cards, invites, envelopes) via DocRaptor API.
 """
 
 import os
