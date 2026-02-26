@@ -368,8 +368,8 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     """Generate HTML for flat card (2 pages: front and back)."""
     
     # Card dimensions (trim size)
-    card_width = 4.75  # inches
-    card_height = 6.75  # inches
+    card_width = 5.0   # inches
+    card_height = 7.0  # inches
     bleed = 0.125 if settings.get('add_bleed', False) else 0  # 1/8 inch
     
     # Total dimensions with bleed
@@ -477,17 +477,17 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     """Generate HTML for folded card (2 spreads: outside and inside)."""
     
     # Single panel dimensions (trim size)
-    panel_width = 4.75  # inches
-    panel_height = 6.75  # inches
+    panel_width = 5.0   # inches
+    panel_height = 7.0  # inches
     bleed = 0.125 if settings.get('add_bleed', False) else 0  # 1/8 inch
     
     # Spread dimensions (2 panels side by side) - this is the TRIM size
-    spread_width = panel_width * 2  # 9.5 inches
-    spread_height = panel_height  # 6.75 inches
+    spread_width = panel_width * 2  # 10 inches
+    spread_height = panel_height     # 7 inches
     
     # Total dimensions with bleed (content extends beyond trim)
-    total_spread_width = spread_width + (bleed * 2)  # 9.75 inches with bleed
-    total_spread_height = spread_height + (bleed * 2)  # 7 inches with bleed
+    total_spread_width = spread_width + (bleed * 2)   # 10.25 inches with bleed
+    total_spread_height = spread_height + (bleed * 2)  # 7.25 inches with bleed
     
     prince_pdf_block = get_prince_pdf_css(settings)
     fit_mode = settings.get('image_fit', 'cover')

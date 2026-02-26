@@ -620,7 +620,7 @@
                     </div>
 
                     <div class="dimensions-display">
-                        <div class="size" id="dimensionsDisplay">4.75" × 6.75"</div>
+                        <div class="size" id="dimensionsDisplay">5" × 7"</div>
                         <div class="label">Trim size per panel</div>
                     </div>
 
@@ -870,8 +870,8 @@ SOMEWHERE, ST 67890</textarea>
                             Profile: <code>PDF/X-4</code><br>
                             ICC: <code>GRACoL 2006 Coated</code><br>
                             Type: <code>Flat Card</code><br>
-                            Size: <code>5" × 7" (with bleed)</code><br>
-                            Trim: <code>4.75" × 6.75"</code> per panel<br>
+                            Size: <code>5.25" × 7.25" (with bleed)</code><br>
+                            Trim: <code>5" × 7"</code> per panel<br>
                             Pages: <code>2 pages (front + back)</code><br>
                             Bleed: <code>1/8"</code><br>
                             Crop marks: <code>No</code>
@@ -1196,7 +1196,7 @@ SOMEWHERE, ST 67890</textarea>
                     <p>
                         <strong>Spread 1 (Outside):</strong> Panel 4 (back) | Panel 1 (front cover - your image)<br>
                         <strong>Spread 2 (Inside):</strong> Panel 2 (inside left) | Panel 3 (inside right)<br>
-                        <em>Each panel: 4.75" × 6.75" | Spread: 9.5" × 6.75"</em>
+                        <em>Each panel: 5" × 7" | Spread: 10" × 7"</em>
                     </p>
                 `;
             } else if (cardType.value === 'envelope') {
@@ -1240,9 +1240,9 @@ SOMEWHERE, ST 67890</textarea>
             
             let sizeInfo, pagesInfo, imagesInfo, trimInfo, typeLabel;
             if (type === 'folded') {
-                sizeInfo = bleed ? '9.75" × 7" per spread (with bleed)' : '9.5" × 6.75" per spread';
+                sizeInfo = bleed ? '10.25" × 7.25" per spread (with bleed)' : '10" × 7" per spread';
                 pagesInfo = '2 spreads (4 panels)';
-                trimInfo = '4.75" × 6.75" per panel';
+                trimInfo = '5" × 7" per panel';
                 typeLabel = 'Folded Card';
                 if (allImages) {
                     const hasBack = backImageInput.files.length > 0;
@@ -1258,9 +1258,9 @@ SOMEWHERE, ST 67890</textarea>
                 const hasBg = imageInput.files.length > 0;
                 imagesInfo = hasBg ? 'Background image + text addressing' : 'Text addressing only (transparent bg)';
             } else {
-                sizeInfo = bleed ? '5" × 7" (with bleed)' : '4.75" × 6.75"';
+                sizeInfo = bleed ? '5.25" × 7.25" (with bleed)' : '5" × 7"';
                 pagesInfo = '2 pages (front + back)';
-                trimInfo = '4.75" × 6.75"';
+                trimInfo = '5" × 7"';
                 typeLabel = 'Flat Cards/Invites';
                 imagesInfo = allImages ? 'Front, Back (user provided)' : 'Front only (placeholder for back)';
             }

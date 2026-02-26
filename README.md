@@ -17,9 +17,9 @@ A Flask application for testing different PDF output settings using the DocRapto
 
 ## Output Dimensions
 
-- **Trim Size (per panel)**: 4.75" × 6.75"
+- **Trim Size (per panel)**: 5" × 7"
 - **With Bleed**: Image extends 1/8" beyond trim on all sides
-- **Trim Marks**: Positioned at 4.75" × 6.75" (trim only, no registration marks)
+- **Trim Marks**: Positioned at 5" × 7" (trim only, no registration marks)
 
 ### Flat Card Layout
 - Page 1: Front (your uploaded image)
@@ -28,8 +28,8 @@ A Flask application for testing different PDF output settings using the DocRapto
 ### Folded Card Layout
 - Spread 1 (Outside): Panel 4 (back cover) | Panel 1 (front cover - your image)
 - Spread 2 (Inside): Panel 2 (inside left) | Panel 3 (inside right)
-- Each panel: 4.75" × 6.75"
-- Full spread: 9.5" × 6.75"
+- Each panel: 5" × 7"
+- Full spread: 10" × 7"
 
 ## Installation
 
@@ -101,7 +101,7 @@ This configuration:
 1. Preserves RGB images and transparency
 2. Embeds a CMYK output intent for print compliance
 3. Forces black text to use only the K ink channel
-4. Adds proper bleed with trim marks at the correct position (4.75" × 6.75")
+4. Adds proper bleed with trim marks at the correct position (5" × 7")
 5. Generates multi-page PDFs with proper imposition
 
 ### Image Preparation
