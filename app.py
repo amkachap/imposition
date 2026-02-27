@@ -112,7 +112,7 @@ def ensure_print_dpi(image_data_base64, image_type, target_w_in, target_h_in, ta
             dpi_info['status'] = 'low'
             dpi_info['warning'] = (
                 f'Very low resolution ({round(effective_dpi)} DPI). '
-                f'Upscaled {scale:.1f}x — quality may be poor in print.'
+                f'Upscaled {scale:.1f}x - quality may be poor in print.'
             )
         elif scale > 1.5:
             dpi_info['status'] = 'marginal'
