@@ -65,6 +65,79 @@ def get_icc_profile_base64(profile_name):
             return base64.b64encode(f.read()).decode('utf-8')
     return None
 
+TARGET_DPI = 300
+
+# Target print dimensions (inches) including bleed for each card type
+PRINT_DIMENSIONS = {
+    'flat': {'panel_w': 5.25, 'panel_h': 7.25},
+    'folded': {'panel_w': 5.25, 'panel_h': 7.25, 'spread_w': 10.25, 'spread_h': 7.25},
+    'envelope': {'panel_w': 7.5, 'panel_h': 5.5},
+}
+
+
+def ensure_print_dpi(image_data_base64, image_type, target_w_in, target_h_in, target_dpi=TARGET_DPI):
+    """Upscale image with LANCZOS if it doesn't meet the target DPI for print."""
+    try:
+        image_bytes = base64.b64decode(image_data_base64)
+        img = Image.open(BytesIO(image_bytes))
+        w, h = img.size
+
+        effective_dpi = min(w / target_w_in, h / target_h_in)
+
+        dpi_info = {
+            'original_size': f'{w}x{h}',
+            'effective_dpi': round(effective_dpi),
+            'upscaled': False,
+            'warning': None,
+        }
+
+        if effective_dpi >= target_dpi:
+            dpi_info['status'] = 'ok'
+            return image_data_base64, image_type, dpi_info
+
+        scale = max(
+            (target_w_in * target_dpi) / w,
+            (target_h_in * target_dpi) / h,
+        )
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+
+        dpi_info['upscaled'] = True
+        dpi_info['new_size'] = f'{new_w}x{new_h}'
+        dpi_info['scale_factor'] = round(scale, 2)
+
+        if scale > 2.0:
+            dpi_info['status'] = 'low'
+            dpi_info['warning'] = (
+                f'Very low resolution ({round(effective_dpi)} DPI). '
+                f'Upscaled {scale:.1f}x — quality may be poor in print.'
+            )
+        elif scale > 1.5:
+            dpi_info['status'] = 'marginal'
+            dpi_info['warning'] = (
+                f'Upscaled {scale:.1f}x to reach {target_dpi} DPI. '
+                f'Some softening may be visible.'
+            )
+        else:
+            dpi_info['status'] = 'upscaled'
+
+        buf = BytesIO()
+        save_fmt = 'PNG' if img.mode == 'RGBA' else 'JPEG'
+        save_kwargs = {'quality': 95} if save_fmt == 'JPEG' else {}
+        img.save(buf, format=save_fmt, **save_kwargs)
+        new_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        new_type = 'png' if save_fmt == 'PNG' else 'jpeg'
+
+        return new_b64, new_type, dpi_info
+    except Exception as e:
+        print(f"Error in ensure_print_dpi: {e}")
+        return image_data_base64, image_type, {
+            'effective_dpi': 0, 'upscaled': False, 'warning': str(e), 'status': 'error'
+        }
+
+
 def get_dominant_color(image_data_base64, border_pct=0.12):
     """Extract dominant color by sampling the outer edges of the image.
     
@@ -1050,6 +1123,37 @@ def generate_pdf():
             'font_family': request.form.get('envelope_font', 'Caveat'),
         }
     
+    # Upscale images to meet 300 DPI print requirement
+    dpi_warnings = []
+    dims = PRINT_DIMENSIONS.get(card_type, PRINT_DIMENSIONS['flat'])
+    
+    if image_data:
+        panel_w = dims['panel_w']
+        panel_h = dims['panel_h']
+        image_data, image_type, front_dpi = ensure_print_dpi(
+            image_data, image_type, panel_w, panel_h
+        )
+        if front_dpi.get('warning'):
+            dpi_warnings.append(f"Front: {front_dpi['warning']}")
+    
+    if 'back' in additional_images:
+        back_img = additional_images['back']
+        back_img['data'], back_img['type'], back_dpi = ensure_print_dpi(
+            back_img['data'], back_img['type'], dims['panel_w'], dims['panel_h']
+        )
+        if back_dpi.get('warning'):
+            dpi_warnings.append(f"Back: {back_dpi['warning']}")
+    
+    if 'inside' in additional_images:
+        inside_img = additional_images['inside']
+        spread_w = dims.get('spread_w', dims['panel_w'])
+        spread_h = dims.get('spread_h', dims['panel_h'])
+        inside_img['data'], inside_img['type'], inside_dpi = ensure_print_dpi(
+            inside_img['data'], inside_img['type'], spread_w, spread_h
+        )
+        if inside_dpi.get('warning'):
+            dpi_warnings.append(f"Inside: {inside_dpi['warning']}")
+    
     # Generate HTML
     html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
     
@@ -1067,12 +1171,15 @@ def generate_pdf():
     with open(temp_path, 'wb') as f:
         f.write(pdf_content)
     
-    return send_file(
+    response = send_file(
         temp_path,
         mimetype='application/pdf',
         as_attachment=True,
         download_name=output_filename
     )
+    if dpi_warnings:
+        response.headers['X-DPI-Warnings'] = ' | '.join(dpi_warnings)
+    return response
 
 
 @app.route('/preview-html', methods=['POST'])
@@ -1153,10 +1260,42 @@ def preview_html():
             'font_family': request.form.get('envelope_font', 'Caveat'),
         }
     
+    # Upscale images to meet 300 DPI print requirement
+    dpi_warnings = []
+    dims = PRINT_DIMENSIONS.get(card_type, PRINT_DIMENSIONS['flat'])
+    
+    if image_data:
+        image_data, image_type, front_dpi = ensure_print_dpi(
+            image_data, image_type, dims['panel_w'], dims['panel_h']
+        )
+        if front_dpi.get('warning'):
+            dpi_warnings.append(f"Front: {front_dpi['warning']}")
+    
+    if 'back' in additional_images:
+        back_img = additional_images['back']
+        back_img['data'], back_img['type'], back_dpi = ensure_print_dpi(
+            back_img['data'], back_img['type'], dims['panel_w'], dims['panel_h']
+        )
+        if back_dpi.get('warning'):
+            dpi_warnings.append(f"Back: {back_dpi['warning']}")
+    
+    if 'inside' in additional_images:
+        inside_img = additional_images['inside']
+        spread_w = dims.get('spread_w', dims['panel_w'])
+        spread_h = dims.get('spread_h', dims['panel_h'])
+        inside_img['data'], inside_img['type'], inside_dpi = ensure_print_dpi(
+            inside_img['data'], inside_img['type'], spread_w, spread_h
+        )
+        if inside_dpi.get('warning'):
+            dpi_warnings.append(f"Inside: {inside_dpi['warning']}")
+    
     # Generate HTML
     html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
     
-    return jsonify({'html': html_content})
+    result = {'html': html_content}
+    if dpi_warnings:
+        result['dpi_warnings'] = dpi_warnings
+    return jsonify(result)
 
 
 if __name__ == '__main__':

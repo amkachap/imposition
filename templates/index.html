@@ -1349,6 +1349,9 @@ SOMEWHERE, ST 67890</textarea>
                     throw new Error(data.error || 'Failed to generate PDF');
                 }
 
+                // Check for DPI warnings in response header
+                const dpiWarnings = response.headers.get('X-DPI-Warnings');
+
                 // Download the PDF
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -1360,7 +1363,11 @@ SOMEWHERE, ST 67890</textarea>
                 document.body.removeChild(a);
                 window.URL.revokeObjectURL(url);
 
-                showSuccess('PDF generated successfully! Download started.');
+                if (dpiWarnings) {
+                    showSuccess('PDF generated! Download started. ⚠️ DPI: ' + dpiWarnings);
+                } else {
+                    showSuccess('PDF generated successfully! Download started.');
+                }
             } catch (error) {
                 showError(error.message);
             } finally {
@@ -1438,6 +1445,10 @@ SOMEWHERE, ST 67890</textarea>
 
                 document.getElementById('htmlPreview').textContent = data.html;
                 document.getElementById('htmlModal').style.display = 'block';
+                
+                if (data.dpi_warnings && data.dpi_warnings.length > 0) {
+                    showSuccess('⚠️ DPI: ' + data.dpi_warnings.join(' | '));
+                }
             } catch (error) {
                 showError(error.message);
             } finally {
