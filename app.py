@@ -390,8 +390,9 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         back_bg_content = ''
     
     # Branding overlay for flat card back panel
+    include_branding = settings.get('include_branding', True)
     branding_height = float(settings.get('branding_height', 1.0))
-    branding_b64 = get_branding_b64()
+    branding_b64 = get_branding_b64() if include_branding else None
     branding_bg_html = ''
     branding_img_html = ''
     branding_css = ''
@@ -1082,6 +1083,7 @@ def generate_pdf():
         'force_cmyk': request.form.get('force_cmyk') == 'true',
         'image_fit': request.form.get('image_fit', 'cover'),
         'background_color': request.form.get('background_color', '#ffffff'),
+        'include_branding': request.form.get('include_branding') == 'true',
         'branding_height': request.form.get('branding_height', '1.0'),
         'test_mode': request.form.get('test_mode') == 'true',
     }
@@ -1221,6 +1223,7 @@ def preview_html():
         'use_cmyk_colors': request.form.get('use_cmyk_colors') == 'true',
         'image_fit': request.form.get('image_fit', 'cover'),
         'background_color': request.form.get('background_color', '#ffffff'),
+        'include_branding': request.form.get('include_branding') == 'true',
         'branding_height': request.form.get('branding_height', '1.0'),
     }
     
