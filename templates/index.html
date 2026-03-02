@@ -750,6 +750,11 @@
                             <input type="number" id="branding_logo_size" name="branding_logo_size" value="0.30" min="0" max="1" step="0.01">
                             <p class="checkbox-description">Logo width as a fraction of card width. 0.30 = 30% of card width.</p>
                         </div>
+                        <div class="form-group" id="heartColorGroup">
+                            <label for="heart_color">Heart Color</label>
+                            <input type="color" id="heart_color" name="heart_color" value="#bd2231">
+                            <p class="checkbox-description">Color of the heart in the HeartStamp logo. Default is the original red.</p>
+                        </div>
                     </div>
 
                     <hr>
@@ -1392,6 +1397,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('include_branding', document.getElementById('include_branding').checked);
             formData.append('branding_height', document.getElementById('branding_height').value);
             formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
+            formData.append('heart_color', document.getElementById('heart_color').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
             
@@ -1489,6 +1495,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('include_branding', document.getElementById('include_branding').checked);
             formData.append('branding_height', document.getElementById('branding_height').value);
             formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
+            formData.append('heart_color', document.getElementById('heart_color').value);
             formData.append('provide_all_images', provideAllImages.checked);
             
             if (cardType.value === 'envelope') {
@@ -1561,6 +1568,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('include_branding', document.getElementById('include_branding').checked);
             formData.append('branding_height', document.getElementById('branding_height').value);
             formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
+            formData.append('heart_color', document.getElementById('heart_color').value);
             formData.append('provide_all_images', provideAllImages.checked);
 
             if (provideAllImages.checked) {

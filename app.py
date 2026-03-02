@@ -200,13 +200,13 @@ PDF_PROFILES = [
 
 # HeartStamp branding image for flat card back panel
 BRANDING_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets')
-BRANDING_B64 = None
+BRANDING_IMG_CACHE = None
 
 
-def get_branding_b64():
-    """Load, crop to content, and cache the branding PNG as base64."""
-    global BRANDING_B64
-    if BRANDING_B64 is None:
+def _load_branding_img():
+    """Load and crop branding PNG, cache the PIL Image."""
+    global BRANDING_IMG_CACHE
+    if BRANDING_IMG_CACHE is None:
         branding_path = os.path.join(BRANDING_DIR, 'branding.png')
         if os.path.exists(branding_path):
             img = Image.open(branding_path).convert('RGBA')
@@ -220,10 +220,31 @@ def get_branding_b64():
                     min(img.height, bbox[3] + padding),
                 )
                 img = img.crop(crop_box)
-            buf = BytesIO()
-            img.save(buf, format='PNG')
-            BRANDING_B64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-    return BRANDING_B64
+            BRANDING_IMG_CACHE = img
+    return BRANDING_IMG_CACHE
+
+
+def get_branding_b64(heart_color=None):
+    """Get branding PNG as base64, optionally replacing the heart color."""
+    img = _load_branding_img()
+    if img is None:
+        return None
+
+    if heart_color:
+        img = img.copy()
+        pixels = img.load()
+        hr = int(heart_color[1:3], 16)
+        hg = int(heart_color[3:5], 16)
+        hb = int(heart_color[5:7], 16)
+        for y in range(img.height):
+            for x in range(img.width):
+                r, g, b, a = pixels[x, y]
+                if a > 50 and r > 140 and g < 100 and b < 100:
+                    pixels[x, y] = (hr, hg, hb, a)
+
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 
 # Simulated inside panel content for folded cards
@@ -406,7 +427,8 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     # Branding overlay for flat card back panel
     include_branding = settings.get('include_branding', True)
     branding_height = float(settings.get('branding_height', 1.0))
-    branding_b64 = get_branding_b64() if include_branding else None
+    heart_color = settings.get('heart_color', None)
+    branding_b64 = get_branding_b64(heart_color=heart_color) if include_branding else None
     branding_bg_html = ''
     branding_img_html = ''
     branding_css = ''
@@ -1109,6 +1131,7 @@ def generate_pdf():
         'include_branding': request.form.get('include_branding') == 'true',
         'branding_height': request.form.get('branding_height', '0.375'),
         'branding_logo_size': request.form.get('branding_logo_size', '0.30'),
+        'heart_color': request.form.get('heart_color', '') or None,
         'test_mode': request.form.get('test_mode') == 'true',
     }
     
@@ -1250,6 +1273,7 @@ def preview_html():
         'include_branding': request.form.get('include_branding') == 'true',
         'branding_height': request.form.get('branding_height', '0.375'),
         'branding_logo_size': request.form.get('branding_logo_size', '0.30'),
+        'heart_color': request.form.get('heart_color', '') or None,
     }
     
     # Envelope-specific settings
