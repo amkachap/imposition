@@ -717,6 +717,16 @@
                     </div>
                     <p class="checkbox-description">Adds trim marks outside the bleed area. Disable if your printer uses TrimBox/BleedBox metadata.</p>
 
+                    <div class="form-group" id="imageFitGroup">
+                        <label for="image_fit">Image Fit Mode</label>
+                        <select id="image_fit" name="image_fit">
+                            <option value="contain" selected>Contain (show full image, no cropping)</option>
+                            <option value="cover">Cover (fill area, may crop edges)</option>
+                            <option value="fill">Fill (stretch to fit exactly)</option>
+                        </select>
+                        <p class="checkbox-description">How images are scaled to fit the panel dimensions.</p>
+                    </div>
+
                     <div class="form-group" id="backColorGroup">
                         <label for="background_color">Back Panel Color</label>
                         <input type="color" id="background_color" name="background_color" value="#000000">
@@ -1068,6 +1078,7 @@ SOMEWHERE, ST 67890</textarea>
             
             // Toggle envelope settings visibility
             const backColorGroup = document.getElementById('backColorGroup');
+            const imageFitGroup = document.getElementById('imageFitGroup');
             const brandingGroup = document.getElementById('brandingGroup');
             const brandingHeightGroup = document.getElementById('brandingHeightGroup');
             const includeBranding = document.getElementById('include_branding');
@@ -1079,6 +1090,7 @@ SOMEWHERE, ST 67890</textarea>
                 insideImageGroup.classList.add('hidden');
                 backImageGroup.classList.add('hidden');
                 backColorGroup.classList.add('hidden');
+                imageFitGroup.classList.add('hidden');
                 brandingGroup.classList.add('hidden');
                 insideImageInput.required = false;
                 backImageInput.required = false;
@@ -1088,6 +1100,7 @@ SOMEWHERE, ST 67890</textarea>
                 provideAllImages.closest('.checkbox-group').classList.remove('hidden');
                 document.getElementById('allImagesDescription').classList.remove('hidden');
                 backColorGroup.classList.remove('hidden');
+                imageFitGroup.classList.remove('hidden');
                 if (isFlat) {
                     brandingGroup.classList.remove('hidden');
                     brandingHeightGroup.classList.toggle('hidden', !includeBranding.checked);
@@ -1345,7 +1358,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('include_crop_marks', document.getElementById('include_crop_marks').checked);
             formData.append('use_true_black', document.getElementById('use_true_black').checked);
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
-            formData.append('image_fit', 'cover');
+            formData.append('image_fit', document.getElementById('image_fit').value);
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('include_branding', document.getElementById('include_branding').checked);
             formData.append('branding_height', document.getElementById('branding_height').value);
@@ -1441,7 +1454,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('include_crop_marks', document.getElementById('include_crop_marks').checked);
             formData.append('use_true_black', document.getElementById('use_true_black').checked);
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
-            formData.append('image_fit', 'cover');
+            formData.append('image_fit', document.getElementById('image_fit').value);
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('include_branding', document.getElementById('include_branding').checked);
             formData.append('branding_height', document.getElementById('branding_height').value);
