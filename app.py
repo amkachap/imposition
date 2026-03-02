@@ -407,10 +407,9 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     # Determine back panel content
     if back_image_data and back_image_type:
         back_bg_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back">'
-        back_branding = ''
     else:
         back_bg_content = ''
-        back_branding = BRANDING_PILL_SVG
+    back_branding = BRANDING_PILL_SVG
     
     html = f"""<!DOCTYPE html>
 <html>
