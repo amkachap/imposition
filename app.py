@@ -198,23 +198,28 @@ PDF_PROFILES = [
     ''  # Default (no profile)
 ]
 
-# Simulated back panel content
-BACK_PANEL_CONTENT = """
-<div class="back-content">
-    <div class="logo-placeholder">✦</div>
-    <h2>Premium Greeting Card</h2>
-    <p class="tagline">Crafted with care, delivered with love</p>
-    <div class="details">
-        <p>Made in USA</p>
-        <p>Recycled Paper</p>
-        <p>www.example.com</p>
-    </div>
-    <div class="barcode-placeholder">
-        <div class="barcode-lines"></div>
-        <span>1234567890</span>
-    </div>
-</div>
+# HeartStamp branding pill for back panel (SVG, resolution-independent)
+BRANDING_PILL_SVG = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 48" width="360" height="48">
+  <rect width="360" height="48" rx="24" fill="#1a1a1a"/>
+  <!-- Heart icon -->
+  <g transform="translate(24, 8)">
+    <path d="M16 28s-12-7.5-12-15c0-4.4 3.6-8 8-8 2.8 0 5.2 1.4 6.5 3.5C19.8 6.4 22.2 5 25 5c4.4 0 8 3.6 8 8 0 7.5-12 15-12 15z" fill="#e53935"/>
+  </g>
+  <!-- HeartStamp text -->
+  <text x="62" y="31" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" letter-spacing="0.5">HeartStamp</text>
+  <!-- Made with AI badge -->
+  <g transform="translate(248, 8)">
+    <rect width="88" height="32" rx="6" fill="#333333"/>
+    <text x="10" y="15" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="8" letter-spacing="0.3">Made with</text>
+    <text x="10" y="27" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="bold">AI</text>
+    <!-- Small heart -->
+    <path d="M62 6c0-2 1.6-3.5 3.5-3.5 1.2 0 2.3.6 2.8 1.5.6-.9 1.7-1.5 2.8-1.5 2 0 3.5 1.6 3.5 3.5 0 3.3-5.2 6.5-5.2 6.5h-2.2S62 9.3 62 6z" fill="#e53935"/>
+    <text x="58" y="27" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="bold">♥ AI</text>
+  </g>
+</svg>
 """
+
 
 # Simulated inside panel content for folded cards
 INSIDE_LEFT_CONTENT = """
@@ -317,74 +322,18 @@ def get_common_styles():
             object-position: center;
         }
         
-        /* Back panel styles */
-        .back-content {
+        /* Branding pill styles (flat card back panel) */
+        .branding-pill {
+            position: absolute;
+            bottom: 0.4in;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2.5in;
+        }
+        
+        .branding-pill svg {
             width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 0.5in;
-            font-family: 'Georgia', serif;
-            color: #333;
-        }
-        
-        .back-content .logo-placeholder {
-            font-size: 48pt;
-            color: #c4a052;
-            margin-bottom: 0.2in;
-        }
-        
-        .back-content h2 {
-            font-size: 14pt;
-            font-weight: normal;
-            letter-spacing: 2pt;
-            text-transform: uppercase;
-            margin-bottom: 0.1in;
-        }
-        
-        .back-content .tagline {
-            font-size: 10pt;
-            font-style: italic;
-            color: #666;
-            margin-bottom: 0.3in;
-        }
-        
-        .back-content .details {
-            font-size: 8pt;
-            color: #888;
-            line-height: 1.6;
-            margin-bottom: 0.3in;
-        }
-        
-        .back-content .barcode-placeholder {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .back-content .barcode-lines {
-            width: 1.2in;
-            height: 0.4in;
-            background: repeating-linear-gradient(
-                90deg,
-                #000 0px,
-                #000 2px,
-                #fff 2px,
-                #fff 4px,
-                #000 4px,
-                #000 5px,
-                #fff 5px,
-                #fff 8px
-            );
-            margin-bottom: 0.05in;
-        }
-        
-        .back-content .barcode-placeholder span {
-            font-family: 'Courier New', monospace;
-            font-size: 8pt;
+            height: auto;
         }
         
         /* Inside panel styles */
@@ -457,9 +406,11 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     
     # Determine back panel content
     if back_image_data and back_image_type:
-        back_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back">'
+        back_bg_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back">'
+        back_branding = ''
     else:
-        back_content = BACK_PANEL_CONTENT
+        back_bg_content = ''
+        back_branding = BRANDING_PILL_SVG
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -513,16 +464,23 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             display: block;
         }}
         
-        .back-page-content {{
+        /* Back page: background extends into bleed */
+        .back-page-bg {{
             position: absolute;
             top: -{bleed}in;
             left: -{bleed}in;
             width: {total_width}in;
             height: {total_height}in;
             background-color: {bg_color};
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        }}
+        
+        /* Back page: content stays within trim */
+        .back-page-trim {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: {card_width}in;
+            height: {card_height}in;
         }}
     </style>
 </head>
@@ -536,8 +494,13 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     
     <!-- Page 2: Back -->
     <div class="page">
-        <div class="back-page-content">
-            {back_content}
+        <div class="back-page-bg">
+            {back_bg_content}
+        </div>
+        <div class="back-page-trim">
+            <div class="branding-pill">
+                {back_branding}
+            </div>
         </div>
     </div>
 </body>

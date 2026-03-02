@@ -717,9 +717,10 @@
                     </div>
                     <p class="checkbox-description">Adds trim marks outside the bleed area. Disable if your printer uses TrimBox/BleedBox metadata.</p>
 
-                    <div class="form-group">
-                        <label for="background_color">Background Color</label>
-                        <input type="color" id="background_color" name="background_color" value="#ffffff">
+                    <div class="form-group" id="backColorGroup">
+                        <label for="background_color">Back Panel Color</label>
+                        <input type="color" id="background_color" name="background_color" value="#000000">
+                        <p class="checkbox-description">Background color for the back panel when no back image is provided</p>
                     </div>
 
                     <hr>
@@ -1051,19 +1052,22 @@ SOMEWHERE, ST 67890</textarea>
             const isEnvelope = cardType.value === 'envelope';
             
             // Toggle envelope settings visibility
+            const backColorGroup = document.getElementById('backColorGroup');
             if (isEnvelope) {
                 envelopeSettings.classList.remove('hidden');
                 provideAllImages.closest('.checkbox-group').classList.add('hidden');
                 document.getElementById('allImagesDescription').classList.add('hidden');
                 insideImageGroup.classList.add('hidden');
                 backImageGroup.classList.add('hidden');
+                backColorGroup.classList.add('hidden');
                 insideImageInput.required = false;
                 backImageInput.required = false;
-                frontImageLabel.innerHTML = 'Envelope Background Image <span class="label-hint">(optional — transparent if not provided)</span>';
+                frontImageLabel.innerHTML = 'Envelope Background Image <span class="label-hint">(optional -- transparent if not provided)</span>';
             } else {
                 envelopeSettings.classList.add('hidden');
                 provideAllImages.closest('.checkbox-group').classList.remove('hidden');
                 document.getElementById('allImagesDescription').classList.remove('hidden');
+                backColorGroup.classList.remove('hidden');
                 frontImageLabel.textContent = 'Front Panel Image';
                 
                 if (showAllImages) {
