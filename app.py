@@ -425,18 +425,22 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         ai_w = ai_h * (145.0 / 80.0)
 
         logo_gap = 0.12
+        bg_pad_h = 0.06
         bg_pad_v = 0.02
 
-        # Background: full width, flush to left/right/bottom bleed edges
+        content_w = hs_w + logo_gap + ai_w
+        branding_bg_width = content_w + (bg_pad_h * 2)
+        branding_bg_left = (card_width - branding_bg_width) / 2
         branding_bg_height = branding_height + bg_pad_v + bleed
         branding_css = f"""
         .branding-bg {{
             position: absolute;
             bottom: -{bleed}in;
-            left: -{bleed}in;
-            width: {total_width}in;
+            left: {branding_bg_left}in;
+            width: {branding_bg_width}in;
             height: {branding_bg_height}in;
             background-color: {bg_color};
+            border-radius: 0.04in 0.04in 0 0;
             z-index: 2;
         }}
 
@@ -450,12 +454,12 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: {logo_gap}in;
         }}
 
         .hs-logo {{
             width: {hs_w:.4f}in;
             height: {hs_h:.4f}in;
+            margin-right: {logo_gap}in;
         }}
 
         .ai-logo {{
