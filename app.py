@@ -416,36 +416,35 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         logo_size = max(0.05, min(1.0, logo_size))
         scale = logo_size / 0.15
 
-        hs_h_pct = min(0.90, 0.45 * scale)
-        ai_h_pct = min(0.95, 0.63 * scale)
-        hs_w = branding_height * hs_h_pct * (140.0 / 35.0)
-        ai_w = branding_height * ai_h_pct * (145.0 / 80.0)
-        logo_gap = 0.15
-        content_w = hs_w + logo_gap + ai_w
-        content_left = (card_width - content_w) / 2
+        # HeartStamp: viewBox 140x35 (4:1 aspect)
+        hs_h = branding_height * min(0.90, 0.50 * scale)
+        hs_w = hs_h * (140.0 / 35.0)
 
-        bg_pad_h = 0.06
-        bg_pad_v = 0.015
-        branding_bg_width = content_w + (bg_pad_h * 2)
-        branding_bg_left = (card_width - branding_bg_width) / 2
-        branding_bg_height = branding_height + bg_pad_v
+        # Made with AI: viewBox 145x80 (~1.81:1 aspect), visually smaller
+        ai_h = branding_height * min(0.90, 0.30 * scale)
+        ai_w = ai_h * (145.0 / 80.0)
+
+        logo_gap = 0.12
+        bg_pad_v = 0.02
+
+        # Background: full width, flush to left/right/bottom bleed edges
+        branding_bg_height = branding_height + bg_pad_v + bleed
         branding_css = f"""
         .branding-bg {{
             position: absolute;
-            bottom: 0;
-            left: {branding_bg_left}in;
-            width: {branding_bg_width}in;
+            bottom: -{bleed}in;
+            left: -{bleed}in;
+            width: {total_width}in;
             height: {branding_bg_height}in;
             background-color: {bg_color};
-            border-radius: 0.04in 0.04in 0 0;
             z-index: 2;
         }}
 
         .branding-img {{
             position: absolute;
-            bottom: 0.02in;
-            left: {content_left}in;
-            width: {content_w}in;
+            bottom: 0;
+            left: 0;
+            width: {card_width}in;
             height: {branding_height}in;
             z-index: 3;
             display: flex;
@@ -454,21 +453,19 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             gap: {logo_gap}in;
         }}
 
-        .branding-logo {{
-            flex: 0 0 auto;
-        }}
-
         .hs-logo {{
-            height: {hs_h_pct * 100:.1f}%;
+            width: {hs_w:.4f}in;
+            height: {hs_h:.4f}in;
         }}
 
         .ai-logo {{
-            height: {ai_h_pct * 100:.1f}%;
+            width: {ai_w:.4f}in;
+            height: {ai_h:.4f}in;
         }}
 
         .branding-logo svg {{
+            width: 100%;
             height: 100%;
-            width: auto;
             display: block;
         }}
         """
