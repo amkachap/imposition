@@ -198,27 +198,21 @@ PDF_PROFILES = [
     ''  # Default (no profile)
 ]
 
-# HeartStamp branding pill for back panel (SVG, resolution-independent)
-BRANDING_PILL_SVG = """
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 48" width="360" height="48">
-  <rect width="360" height="48" rx="24" fill="#1a1a1a"/>
-  <!-- Heart icon -->
-  <g transform="translate(24, 8)">
-    <path d="M16 28s-12-7.5-12-15c0-4.4 3.6-8 8-8 2.8 0 5.2 1.4 6.5 3.5C19.8 6.4 22.2 5 25 5c4.4 0 8 3.6 8 8 0 7.5-12 15-12 15z" fill="#e53935"/>
-  </g>
-  <!-- HeartStamp text -->
-  <text x="62" y="31" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" letter-spacing="0.5">HeartStamp</text>
-  <!-- Made with AI badge -->
-  <g transform="translate(248, 8)">
-    <rect width="88" height="32" rx="6" fill="#333333"/>
-    <text x="10" y="15" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="8" letter-spacing="0.3">Made with</text>
-    <text x="10" y="27" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="bold">AI</text>
-    <!-- Small heart -->
-    <path d="M62 6c0-2 1.6-3.5 3.5-3.5 1.2 0 2.3.6 2.8 1.5.6-.9 1.7-1.5 2.8-1.5 2 0 3.5 1.6 3.5 3.5 0 3.3-5.2 6.5-5.2 6.5h-2.2S62 9.3 62 6z" fill="#e53935"/>
-    <text x="58" y="27" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="bold">♥ AI</text>
-  </g>
-</svg>
-"""
+# HeartStamp branding image for back panel (base64-encoded PNG)
+BRANDING_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets')
+BRANDING_B64 = None
+BRANDING_BG_COLOR = '#1a1a1a'
+
+
+def get_branding_b64():
+    """Load and cache the branding image as base64."""
+    global BRANDING_B64
+    if BRANDING_B64 is None:
+        branding_path = os.path.join(BRANDING_DIR, 'branding.png')
+        if os.path.exists(branding_path):
+            with open(branding_path, 'rb') as f:
+                BRANDING_B64 = base64.b64encode(f.read()).decode('utf-8')
+    return BRANDING_B64
 
 
 # Simulated inside panel content for folded cards
@@ -322,17 +316,19 @@ def get_common_styles():
             object-position: center;
         }
         
-        /* Branding pill styles (flat card back panel) */
-        .branding-pill {
+        /* Branding strip styles (flat card back panel) */
+        .branding-strip {
             position: absolute;
-            bottom: 0.4in;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 2.5in;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            text-align: center;
         }
         
-        .branding-pill svg {
-            width: 100%;
+        .branding-strip img {
+            display: block;
+            margin: 0 auto;
+            max-width: 70%;
             height: auto;
         }
         
@@ -409,7 +405,12 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         back_bg_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back">'
     else:
         back_bg_content = ''
-    back_branding = BRANDING_PILL_SVG
+    
+    branding_b64 = get_branding_b64()
+    if branding_b64:
+        back_branding = f'<img src="data:image/png;base64,{branding_b64}" alt="HeartStamp">'
+    else:
+        back_branding = ''
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -481,6 +482,16 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             width: {card_width}in;
             height: {card_height}in;
         }}
+        
+        /* Branding background extends into bleed at bottom and sides */
+        .branding-bleed {{
+            position: absolute;
+            bottom: -{bleed}in;
+            left: -{bleed}in;
+            width: {total_width}in;
+            height: 0.6in;
+            background-color: {BRANDING_BG_COLOR};
+        }}
     </style>
 </head>
 <body>
@@ -496,8 +507,9 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         <div class="back-page-bg">
             {back_bg_content}
         </div>
+        <div class="branding-bleed"></div>
         <div class="back-page-trim">
-            <div class="branding-pill">
+            <div class="branding-strip">
                 {back_branding}
             </div>
         </div>
