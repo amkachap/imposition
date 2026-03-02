@@ -198,22 +198,6 @@ PDF_PROFILES = [
     ''  # Default (no profile)
 ]
 
-# HeartStamp branding image for back panel (base64-encoded PNG)
-BRANDING_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets')
-BRANDING_B64 = None
-BRANDING_BG_COLOR = '#1a1a1a'
-
-
-def get_branding_b64():
-    """Load and cache the branding image as base64."""
-    global BRANDING_B64
-    if BRANDING_B64 is None:
-        branding_path = os.path.join(BRANDING_DIR, 'branding.png')
-        if os.path.exists(branding_path):
-            with open(branding_path, 'rb') as f:
-                BRANDING_B64 = base64.b64encode(f.read()).decode('utf-8')
-    return BRANDING_B64
-
 
 # Simulated inside panel content for folded cards
 INSIDE_LEFT_CONTENT = """
@@ -316,22 +300,6 @@ def get_common_styles():
             object-position: center;
         }
         
-        /* Branding strip styles (flat card back panel) */
-        .branding-strip {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            text-align: center;
-        }
-        
-        .branding-strip img {
-            display: block;
-            margin: 0 auto;
-            max-width: 70%;
-            height: auto;
-        }
-        
         /* Inside panel styles */
         .inside-content {
             width: 100%;
@@ -406,12 +374,6 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     else:
         back_bg_content = ''
     
-    branding_b64 = get_branding_b64()
-    if branding_b64:
-        back_branding = f'<img src="data:image/png;base64,{branding_b64}" alt="HeartStamp">'
-    else:
-        back_branding = ''
-    
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -474,24 +436,6 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             background-color: {bg_color};
         }}
         
-        /* Back page: content stays within trim */
-        .back-page-trim {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: {card_width}in;
-            height: {card_height}in;
-        }}
-        
-        /* Branding background extends into bleed at bottom and sides */
-        .branding-bleed {{
-            position: absolute;
-            bottom: -{bleed}in;
-            left: -{bleed}in;
-            width: {total_width}in;
-            height: 0.6in;
-            background-color: {BRANDING_BG_COLOR};
-        }}
     </style>
 </head>
 <body>
@@ -506,12 +450,6 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     <div class="page">
         <div class="back-page-bg">
             {back_bg_content}
-        </div>
-        <div class="branding-bleed"></div>
-        <div class="back-page-trim">
-            <div class="branding-strip">
-                {back_branding}
-            </div>
         </div>
     </div>
 </body>
