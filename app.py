@@ -400,27 +400,27 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     if branding_b64:
         branding_bg_html = '<div class="branding-bg"></div>'
         branding_img_html = f'<div class="branding-img"><img src="data:image/png;base64,{branding_b64}" alt="HeartStamp"></div>'
-        branding_strip_width = card_width * 0.30
-        branding_strip_left = (card_width - branding_strip_width) / 2
+        branding_logo_width = card_width * 0.30
+        branding_logo_left = (card_width - branding_logo_width) / 2
         branding_css = f"""
-        /* Branding colored background - centered strip at bottom */
+        /* Branding colored background - full width at bottom, covers any baked-in strip */
         .branding-bg {{
             position: absolute;
             bottom: -{bleed}in;
-            left: {branding_strip_left}in;
-            width: {branding_strip_width}in;
+            left: -{bleed}in;
+            width: {total_width}in;
             height: {branding_height + bleed}in;
             background-color: {bg_color};
-            border-radius: 0.1in 0.1in 0 0;
+            border-radius: 0.04in 0.04in 0 0;
             z-index: 2;
         }}
         
-        /* Branding transparent PNG overlay - centered bottom strip */
+        /* Branding logo overlay - narrow, centered at bottom */
         .branding-img {{
             position: absolute;
             bottom: 0;
-            left: {branding_strip_left}in;
-            width: {branding_strip_width}in;
+            left: {branding_logo_left}in;
+            width: {branding_logo_width}in;
             height: {branding_height}in;
             z-index: 3;
         }}
