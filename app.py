@@ -386,8 +386,10 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     # Determine back panel content
     if back_image_data and back_image_type:
         back_bg_content = f'<img class="image" src="data:image/{back_image_type};base64,{back_image_data}" alt="Card Back">'
+        back_bg_color = 'transparent'
     else:
         back_bg_content = ''
+        back_bg_color = bg_color
     
     # Branding overlay for flat card back panel
     include_branding = settings.get('include_branding', True)
@@ -403,12 +405,12 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         branding_logo_width = card_width * 0.30
         branding_logo_left = (card_width - branding_logo_width) / 2
         branding_css = f"""
-        /* Branding colored background - full width at bottom, covers any baked-in strip */
+        /* Branding colored background - narrow centered strip at bottom */
         .branding-bg {{
             position: absolute;
             bottom: -{bleed}in;
-            left: -{bleed}in;
-            width: {total_width}in;
+            left: {branding_logo_left}in;
+            width: {branding_logo_width}in;
             height: {branding_height + bleed}in;
             background-color: {bg_color};
             border-radius: 0.04in 0.04in 0 0;
@@ -486,14 +488,14 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             display: block;
         }}
         
-        /* Back page: background image extends into bleed */
+        /* Back page: background extends into bleed */
         .back-page-bg {{
             position: absolute;
             top: -{bleed}in;
             left: -{bleed}in;
             width: {total_width}in;
             height: {total_height}in;
-            background-color: {bg_color};
+            background-color: {back_bg_color};
             z-index: 1;
         }}
         
