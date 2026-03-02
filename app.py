@@ -204,13 +204,25 @@ BRANDING_B64 = None
 
 
 def get_branding_b64():
-    """Load and cache the branding PNG as base64."""
+    """Load, crop to content, and cache the branding PNG as base64."""
     global BRANDING_B64
     if BRANDING_B64 is None:
         branding_path = os.path.join(BRANDING_DIR, 'branding.png')
         if os.path.exists(branding_path):
-            with open(branding_path, 'rb') as f:
-                BRANDING_B64 = base64.b64encode(f.read()).decode('utf-8')
+            img = Image.open(branding_path).convert('RGBA')
+            bbox = img.split()[3].getbbox()
+            if bbox:
+                padding = 10
+                crop_box = (
+                    max(0, bbox[0] - padding),
+                    max(0, bbox[1] - padding),
+                    min(img.width, bbox[2] + padding),
+                    min(img.height, bbox[3] + padding),
+                )
+                img = img.crop(crop_box)
+            buf = BytesIO()
+            img.save(buf, format='PNG')
+            BRANDING_B64 = base64.b64encode(buf.getvalue()).decode('utf-8')
     return BRANDING_B64
 
 
