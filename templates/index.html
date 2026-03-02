@@ -723,6 +723,12 @@
                         <p class="checkbox-description">Background color for the back panel when no back image is provided</p>
                     </div>
 
+                    <div class="form-group" id="brandingHeightGroup">
+                        <label for="branding_height">Branding Background Height (inches)</label>
+                        <input type="number" id="branding_height" name="branding_height" value="1.0" min="0.25" max="3.0" step="0.125">
+                        <p class="checkbox-description">Height of the branding background strip at the bottom of the flat card back panel. Uses the Back Panel Color.</p>
+                    </div>
+
                     <hr>
                     <div class="section-header">API Options</div>
 
@@ -1053,6 +1059,8 @@ SOMEWHERE, ST 67890</textarea>
             
             // Toggle envelope settings visibility
             const backColorGroup = document.getElementById('backColorGroup');
+            const brandingHeightGroup = document.getElementById('brandingHeightGroup');
+            const isFlat = cardType.value === 'flat';
             if (isEnvelope) {
                 envelopeSettings.classList.remove('hidden');
                 provideAllImages.closest('.checkbox-group').classList.add('hidden');
@@ -1060,6 +1068,7 @@ SOMEWHERE, ST 67890</textarea>
                 insideImageGroup.classList.add('hidden');
                 backImageGroup.classList.add('hidden');
                 backColorGroup.classList.add('hidden');
+                brandingHeightGroup.classList.add('hidden');
                 insideImageInput.required = false;
                 backImageInput.required = false;
                 frontImageLabel.innerHTML = 'Envelope Background Image <span class="label-hint">(optional -- transparent if not provided)</span>';
@@ -1068,6 +1077,11 @@ SOMEWHERE, ST 67890</textarea>
                 provideAllImages.closest('.checkbox-group').classList.remove('hidden');
                 document.getElementById('allImagesDescription').classList.remove('hidden');
                 backColorGroup.classList.remove('hidden');
+                if (isFlat) {
+                    brandingHeightGroup.classList.remove('hidden');
+                } else {
+                    brandingHeightGroup.classList.add('hidden');
+                }
                 frontImageLabel.textContent = 'Front Panel Image';
                 
                 if (showAllImages) {
@@ -1321,6 +1335,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
             formData.append('image_fit', 'cover');
             formData.append('background_color', document.getElementById('background_color').value);
+            formData.append('branding_height', document.getElementById('branding_height').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
             
@@ -1415,6 +1430,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
             formData.append('image_fit', 'cover');
             formData.append('background_color', document.getElementById('background_color').value);
+            formData.append('branding_height', document.getElementById('branding_height').value);
             formData.append('provide_all_images', provideAllImages.checked);
             
             if (cardType.value === 'envelope') {

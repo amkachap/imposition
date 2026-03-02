@@ -198,6 +198,21 @@ PDF_PROFILES = [
     ''  # Default (no profile)
 ]
 
+# HeartStamp branding image for flat card back panel
+BRANDING_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets')
+BRANDING_B64 = None
+
+
+def get_branding_b64():
+    """Load and cache the branding PNG as base64."""
+    global BRANDING_B64
+    if BRANDING_B64 is None:
+        branding_path = os.path.join(BRANDING_DIR, 'branding.png')
+        if os.path.exists(branding_path):
+            with open(branding_path, 'rb') as f:
+                BRANDING_B64 = base64.b64encode(f.read()).decode('utf-8')
+    return BRANDING_B64
+
 
 # Simulated inside panel content for folded cards
 INSIDE_LEFT_CONTENT = """
@@ -374,6 +389,47 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     else:
         back_bg_content = ''
     
+    # Branding overlay for flat card back panel
+    branding_height = float(settings.get('branding_height', 1.0))
+    branding_b64 = get_branding_b64()
+    branding_bg_html = ''
+    branding_img_html = ''
+    branding_css = ''
+    
+    if branding_b64:
+        branding_bg_html = '<div class="branding-bg"></div>'
+        branding_img_html = f'<div class="branding-img"><img src="data:image/png;base64,{branding_b64}" alt="HeartStamp"></div>'
+        branding_css = f"""
+        /* Branding colored background - extends into bleed */
+        .branding-bg {{
+            position: absolute;
+            bottom: -{bleed}in;
+            left: -{bleed}in;
+            width: {total_width}in;
+            height: {branding_height + bleed}in;
+            background-color: {bg_color};
+            border-radius: 0.15in 0.15in 0 0;
+            z-index: 2;
+        }}
+        
+        /* Branding transparent PNG overlay - fills entire trim area */
+        .branding-img {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: {card_width}in;
+            height: {card_height}in;
+            z-index: 3;
+        }}
+        
+        .branding-img img {{
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            display: block;
+        }}
+        """
+    
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -426,7 +482,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             display: block;
         }}
         
-        /* Back page: background extends into bleed */
+        /* Back page: background image extends into bleed */
         .back-page-bg {{
             position: absolute;
             top: -{bleed}in;
@@ -434,8 +490,10 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             width: {total_width}in;
             height: {total_height}in;
             background-color: {bg_color};
+            z-index: 1;
         }}
         
+        {branding_css}
     </style>
 </head>
 <body>
@@ -451,6 +509,8 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         <div class="back-page-bg">
             {back_bg_content}
         </div>
+        {branding_bg_html}
+        {branding_img_html}
     </div>
 </body>
 </html>"""
@@ -1021,6 +1081,7 @@ def generate_pdf():
         'force_cmyk': request.form.get('force_cmyk') == 'true',
         'image_fit': request.form.get('image_fit', 'cover'),
         'background_color': request.form.get('background_color', '#ffffff'),
+        'branding_height': request.form.get('branding_height', '1.0'),
         'test_mode': request.form.get('test_mode') == 'true',
     }
     
@@ -1159,6 +1220,7 @@ def preview_html():
         'use_cmyk_colors': request.form.get('use_cmyk_colors') == 'true',
         'image_fit': request.form.get('image_fit', 'cover'),
         'background_color': request.form.get('background_color', '#ffffff'),
+        'branding_height': request.form.get('branding_height', '1.0'),
     }
     
     # Envelope-specific settings
