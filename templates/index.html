@@ -760,6 +760,11 @@
                             <input type="color" id="text_color" name="text_color" value="#ffffff">
                             <p class="checkbox-description">Color of the text in the HeartStamp logo.</p>
                         </div>
+                        <div class="form-group" id="aiColorGroup">
+                            <label for="ai_color">Made with AI Color</label>
+                            <input type="color" id="ai_color" name="ai_color" value="#000000">
+                            <p class="checkbox-description">Color of the "Made with AI" logo.</p>
+                        </div>
                     </div>
 
                     <hr>
@@ -1388,6 +1393,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
             formData.append('heart_color', document.getElementById('heart_color').value);
             formData.append('text_color', document.getElementById('text_color').value);
+            formData.append('ai_color', document.getElementById('ai_color').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
             
@@ -1475,6 +1481,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
             formData.append('heart_color', document.getElementById('heart_color').value);
             formData.append('text_color', document.getElementById('text_color').value);
+            formData.append('ai_color', document.getElementById('ai_color').value);
             formData.append('provide_all_images', provideAllImages.checked);
 
             if (provideAllImages.checked) {
