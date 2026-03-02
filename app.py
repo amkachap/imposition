@@ -414,16 +414,23 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     if branding_b64:
         branding_bg_html = '<div class="branding-bg"></div>'
         branding_img_html = f'<div class="branding-img"><img src="data:image/png;base64,{branding_b64}" alt="HeartStamp"></div>'
-        branding_logo_width = card_width * 0.30
+        logo_size = float(settings.get('branding_logo_size', 0.30))
+        logo_size = max(0.05, min(1.0, logo_size))
+        branding_logo_width = card_width * logo_size
         branding_logo_left = (card_width - branding_logo_width) / 2
+        bg_pad_h = 0.1
+        bg_pad_v = 0.05
+        branding_bg_width = branding_logo_width + (bg_pad_h * 2)
+        branding_bg_left = (card_width - branding_bg_width) / 2
+        branding_bg_height = branding_height + bg_pad_v + bleed
         branding_css = f"""
-        /* Branding colored background - narrow centered strip at bottom */
+        /* Branding colored background - centered strip with padding */
         .branding-bg {{
             position: absolute;
             bottom: -{bleed}in;
-            left: {branding_logo_left}in;
-            width: {branding_logo_width}in;
-            height: {branding_height + bleed}in;
+            left: {branding_bg_left}in;
+            width: {branding_bg_width}in;
+            height: {branding_bg_height}in;
             background-color: {bg_color};
             border-radius: 0.04in 0.04in 0 0;
             z-index: 2;
@@ -1100,7 +1107,8 @@ def generate_pdf():
         'image_fit': request.form.get('image_fit', 'cover'),
         'background_color': request.form.get('background_color', '#ffffff'),
         'include_branding': request.form.get('include_branding') == 'true',
-        'branding_height': request.form.get('branding_height', '1.0'),
+        'branding_height': request.form.get('branding_height', '0.375'),
+        'branding_logo_size': request.form.get('branding_logo_size', '0.30'),
         'test_mode': request.form.get('test_mode') == 'true',
     }
     
@@ -1240,7 +1248,8 @@ def preview_html():
         'image_fit': request.form.get('image_fit', 'cover'),
         'background_color': request.form.get('background_color', '#ffffff'),
         'include_branding': request.form.get('include_branding') == 'true',
-        'branding_height': request.form.get('branding_height', '1.0'),
+        'branding_height': request.form.get('branding_height', '0.375'),
+        'branding_logo_size': request.form.get('branding_logo_size', '0.30'),
     }
     
     # Envelope-specific settings

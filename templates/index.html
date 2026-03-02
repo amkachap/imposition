@@ -745,6 +745,11 @@
                             <input type="number" id="branding_height" name="branding_height" value="0.375" min="0.25" max="3.0" step="0.125">
                             <p class="checkbox-description">Height of the branding background strip. Uses the Back Panel Color.</p>
                         </div>
+                        <div class="form-group" id="brandingLogoSizeGroup">
+                            <label for="branding_logo_size">Logo Size (0 to 1)</label>
+                            <input type="number" id="branding_logo_size" name="branding_logo_size" value="0.30" min="0" max="1" step="0.01">
+                            <p class="checkbox-description">Logo width as a fraction of card width. 0.30 = 30% of card width.</p>
+                        </div>
                     </div>
 
                     <hr>
@@ -884,6 +889,13 @@ SOMEWHERE, ST 67890</textarea>
                             </svg>
                             View HTML
                         </button>
+                        <button type="button" class="btn btn-secondary" id="visualPreviewBtn">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                            Visual Preview
+                        </button>
                     </div>
 
                     <div class="error-message" id="errorMessage"></div>
@@ -918,6 +930,23 @@ SOMEWHERE, ST 67890</textarea>
             <button onclick="document.getElementById('htmlModal').style.display='none'" style="position:absolute; top:16px; right:16px; background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-primary); padding:8px 16px; border-radius:var(--radius); cursor:pointer;">Close</button>
             <h3 style="margin-bottom:16px;">Generated HTML</h3>
             <pre id="htmlPreview" style="background:var(--bg-tertiary); padding:20px; border-radius:var(--radius); overflow:auto; max-height:70vh; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-all;"></pre>
+        </div>
+    </div>
+
+    <!-- Visual Preview Modal -->
+    <div id="visualModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; padding:20px; overflow:auto;">
+        <div style="max-width:1000px; margin:0 auto; background:var(--bg-secondary); border-radius:var(--radius-lg); padding:24px; position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="margin:0;">Visual Preview</h3>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:14px;">
+                        <input type="checkbox" id="trimPreviewToggle">
+                        Show trimmed (no bleed)
+                    </label>
+                    <button onclick="document.getElementById('visualModal').style.display='none'" style="background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-primary); padding:8px 16px; border-radius:var(--radius); cursor:pointer;">Close</button>
+                </div>
+            </div>
+            <div id="visualPreviewContainer" style="display:flex; flex-wrap:wrap; gap:20px; justify-content:center;"></div>
         </div>
     </div>
 
@@ -1362,6 +1391,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('include_branding', document.getElementById('include_branding').checked);
             formData.append('branding_height', document.getElementById('branding_height').value);
+            formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
             
@@ -1458,6 +1488,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('background_color', document.getElementById('background_color').value);
             formData.append('include_branding', document.getElementById('include_branding').checked);
             formData.append('branding_height', document.getElementById('branding_height').value);
+            formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
             formData.append('provide_all_images', provideAllImages.checked);
             
             if (cardType.value === 'envelope') {
@@ -1502,6 +1533,137 @@ SOMEWHERE, ST 67890</textarea>
                 hideStatus();
             }
         });
+
+        // Visual Preview
+        const visualPreviewBtn = document.getElementById('visualPreviewBtn');
+        let lastPreviewHtml = '';
+
+        visualPreviewBtn.addEventListener('click', async () => {
+            if (!imageInput.files.length && cardType.value !== 'envelope') {
+                showError('Please select a front panel image first.');
+                return;
+            }
+
+            showStatus('Generating visual preview...');
+            hideMessages();
+
+            const formData = new FormData();
+            formData.append('image', imageInput.files[0]);
+            formData.append('card_type', cardType.value);
+            formData.append('pdf_profile', document.getElementById('pdf_profile').value);
+            formData.append('icc_profile', iccProfile.value);
+            formData.append('add_bleed', addBleed.checked);
+            formData.append('include_crop_marks', document.getElementById('include_crop_marks').checked);
+            formData.append('use_true_black', document.getElementById('use_true_black').checked);
+            formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
+            formData.append('image_fit', document.getElementById('image_fit').value);
+            formData.append('background_color', document.getElementById('background_color').value);
+            formData.append('include_branding', document.getElementById('include_branding').checked);
+            formData.append('branding_height', document.getElementById('branding_height').value);
+            formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
+            formData.append('provide_all_images', provideAllImages.checked);
+
+            if (provideAllImages.checked) {
+                if (insideImageInput.files.length) formData.append('inside_image', insideImageInput.files[0]);
+                if (backImageInput.files.length) formData.append('back_image', backImageInput.files[0]);
+            }
+
+            if (cardType.value === 'envelope') {
+                formData.append('envelope_font', envelopeFont.value);
+                formData.append('envelope_text_color', envelopeTextColor.value);
+                formData.append('return_name', document.getElementById('return_name').value);
+                formData.append('return_address', document.getElementById('return_address').value);
+                formData.append('delivery_name', document.getElementById('delivery_name').value);
+                formData.append('delivery_address', document.getElementById('delivery_address').value);
+            }
+
+            try {
+                const response = await fetch('/preview-html', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Failed to generate preview');
+
+                lastPreviewHtml = data.html;
+                renderVisualPreview(false);
+                document.getElementById('visualModal').style.display = 'block';
+                document.getElementById('trimPreviewToggle').checked = false;
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideStatus();
+            }
+        });
+
+        document.getElementById('trimPreviewToggle').addEventListener('change', (e) => {
+            renderVisualPreview(e.target.checked);
+        });
+
+        function renderVisualPreview(showTrimmed) {
+            const container = document.getElementById('visualPreviewContainer');
+            container.innerHTML = '';
+
+            const iframe = document.createElement('iframe');
+            iframe.style.border = '1px solid var(--border)';
+            iframe.style.borderRadius = 'var(--radius)';
+            iframe.style.background = '#fff';
+
+            let html = lastPreviewHtml;
+
+            if (showTrimmed) {
+                html = html.replace(
+                    /<\/style>/,
+                    `.page { overflow: hidden !important; }
+                     .page-content, .back-page-bg { top: 0 !important; left: 0 !important; }
+                     .branding-bg { bottom: 0 !important; left: auto !important; }
+                    </style>`
+                );
+            }
+
+            const isEnvelope = cardType.value === 'envelope';
+            const isFolded = cardType.value === 'folded';
+            const pageW = isEnvelope ? 7.25 : (isFolded ? 10.0 : 5.0);
+            const pageH = isEnvelope ? 5.25 : 7.0;
+            const scale = Math.min(900 / (pageW * 96), 600 / (pageH * 96));
+
+            iframe.style.width = Math.ceil(pageW * 96 * scale) + 'px';
+            iframe.style.height = Math.ceil(pageH * 96 * scale * (isFolded ? 2.1 : 2.1)) + 'px';
+
+            container.appendChild(iframe);
+
+            const doc = iframe.contentDocument || iframe.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+
+            iframe.style.transform = `scale(${scale})`;
+            iframe.style.transformOrigin = 'top left';
+            iframe.style.width = Math.ceil(pageW * 96) + 'px';
+            iframe.style.height = Math.ceil(pageH * 96 * (isFolded ? 2.1 : 2.1)) + 'px';
+
+            const wrapper = document.createElement('div');
+            wrapper.style.width = Math.ceil(pageW * 96 * scale) + 'px';
+            wrapper.style.height = Math.ceil(pageH * 96 * scale * (isFolded ? 2.1 : 2.1)) + 'px';
+            wrapper.style.overflow = 'hidden';
+            wrapper.style.borderRadius = 'var(--radius)';
+            wrapper.style.border = '1px solid var(--border)';
+
+            container.innerHTML = '';
+            wrapper.appendChild(iframe);
+            container.appendChild(wrapper);
+
+            if (showTrimmed) {
+                const label = document.createElement('p');
+                label.style.textAlign = 'center';
+                label.style.color = 'var(--text-secondary)';
+                label.style.fontSize = '13px';
+                label.style.marginTop = '8px';
+                label.textContent = 'Showing trimmed view (bleed area hidden)';
+                container.appendChild(label);
+            }
+        }
 
         // UI helpers
         function showStatus(text) {
