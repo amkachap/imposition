@@ -753,7 +753,12 @@
                         <div class="form-group" id="heartColorGroup">
                             <label for="heart_color">Heart Color</label>
                             <input type="color" id="heart_color" name="heart_color" value="#bd2231">
-                            <p class="checkbox-description">Color of the heart in the HeartStamp logo. Default is the original red.</p>
+                            <p class="checkbox-description">Color of the heart in the HeartStamp logo.</p>
+                        </div>
+                        <div class="form-group" id="textColorGroup">
+                            <label for="text_color">Logo Text Color</label>
+                            <input type="color" id="text_color" name="text_color" value="#ffffff">
+                            <p class="checkbox-description">Color of the text in the HeartStamp logo.</p>
                         </div>
                     </div>
 
@@ -888,12 +893,6 @@ SOMEWHERE, ST 67890</textarea>
                             </svg>
                             Generate PDF
                         </button>
-                        <button type="button" class="btn btn-secondary" id="previewBtn">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-                            </svg>
-                            View HTML
-                        </button>
                         <button type="button" class="btn btn-secondary" id="visualPreviewBtn">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -929,15 +928,6 @@ SOMEWHERE, ST 67890</textarea>
         <span class="status-text" id="statusText">Generating PDF...</span>
     </div>
 
-    <!-- HTML Preview Modal -->
-    <div id="htmlModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:1000; padding:40px; overflow:auto;">
-        <div style="max-width:900px; margin:0 auto; background:var(--bg-secondary); border-radius:var(--radius-lg); padding:24px; position:relative;">
-            <button onclick="document.getElementById('htmlModal').style.display='none'" style="position:absolute; top:16px; right:16px; background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-primary); padding:8px 16px; border-radius:var(--radius); cursor:pointer;">Close</button>
-            <h3 style="margin-bottom:16px;">Generated HTML</h3>
-            <pre id="htmlPreview" style="background:var(--bg-tertiary); padding:20px; border-radius:var(--radius); overflow:auto; max-height:70vh; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-all;"></pre>
-        </div>
-    </div>
-
     <!-- Visual Preview Modal -->
     <div id="visualModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; padding:20px; overflow:auto;">
         <div style="max-width:1000px; margin:0 auto; background:var(--bg-secondary); border-radius:var(--radius-lg); padding:24px; position:relative;">
@@ -963,7 +953,6 @@ SOMEWHERE, ST 67890</textarea>
         const fileInfo = document.getElementById('fileInfo');
         const imagePreview = document.getElementById('imagePreview');
         const generateBtn = document.getElementById('generateBtn');
-        const previewBtn = document.getElementById('previewBtn');
         const statusBar = document.getElementById('statusBar');
         const statusText = document.getElementById('statusText');
         const errorMessage = document.getElementById('errorMessage');
@@ -1398,6 +1387,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('branding_height', document.getElementById('branding_height').value);
             formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
             formData.append('heart_color', document.getElementById('heart_color').value);
+            formData.append('text_color', document.getElementById('text_color').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
             
@@ -1456,91 +1446,6 @@ SOMEWHERE, ST 67890</textarea>
             }
         });
 
-        // HTML Preview
-        previewBtn.addEventListener('click', async () => {
-            if (!imageInput.files.length && cardType.value !== 'envelope') {
-                showError('Please select a front panel image first.');
-                return;
-            }
-            
-            // Validate additional images if provide_all_images is checked (not for envelope)
-            if (cardType.value !== 'envelope' && provideAllImages.checked) {
-                if (cardType.value === 'folded') {
-                    if (!insideImageInput.files.length) {
-                        showError('Please select an inside panel image.');
-                        return;
-                    }
-                } else {
-                    if (!backImageInput.files.length) {
-                        showError('Please select a back panel image.');
-                        return;
-                    }
-                }
-            }
-
-            showStatus('Generating HTML preview...');
-            hideMessages();
-
-            const formData = new FormData();
-            formData.append('image', imageInput.files[0]);
-            formData.append('card_type', cardType.value);
-            formData.append('pdf_profile', document.getElementById('pdf_profile').value);
-            formData.append('icc_profile', iccProfile.value);
-            formData.append('add_bleed', addBleed.checked);
-            formData.append('include_crop_marks', document.getElementById('include_crop_marks').checked);
-            formData.append('use_true_black', document.getElementById('use_true_black').checked);
-            formData.append('use_cmyk_colors', document.getElementById('use_cmyk_colors').checked);
-            formData.append('image_fit', document.getElementById('image_fit').value);
-            formData.append('background_color', document.getElementById('background_color').value);
-            formData.append('include_branding', document.getElementById('include_branding').checked);
-            formData.append('branding_height', document.getElementById('branding_height').value);
-            formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
-            formData.append('heart_color', document.getElementById('heart_color').value);
-            formData.append('provide_all_images', provideAllImages.checked);
-            
-            if (cardType.value === 'envelope') {
-                formData.append('return_name', document.getElementById('return_name').value);
-                formData.append('return_address', document.getElementById('return_address').value);
-                formData.append('delivery_name', document.getElementById('delivery_name').value);
-                formData.append('delivery_address', document.getElementById('delivery_address').value);
-                formData.append('envelope_text_color', envelopeTextColor.value);
-                formData.append('envelope_font', envelopeFont.value);
-            }
-            
-            if (provideAllImages.checked) {
-                if (backImageInput.files.length) {
-                    formData.append('back_image', backImageInput.files[0]);
-                }
-                if (cardType.value === 'folded' && insideImageInput.files.length) {
-                    formData.append('inside_image', insideImageInput.files[0]);
-                }
-            }
-
-            try {
-                const response = await fetch('/preview-html', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to generate preview');
-                }
-
-                document.getElementById('htmlPreview').textContent = data.html;
-                document.getElementById('htmlModal').style.display = 'block';
-                
-                if (data.dpi_warnings && data.dpi_warnings.length > 0) {
-                    showSuccess('⚠️ DPI: ' + data.dpi_warnings.join(' | '));
-                }
-            } catch (error) {
-                showError(error.message);
-            } finally {
-                hideStatus();
-            }
-        });
-
         // Visual Preview
         const visualPreviewBtn = document.getElementById('visualPreviewBtn');
         let lastPreviewHtml = '';
@@ -1569,6 +1474,7 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('branding_height', document.getElementById('branding_height').value);
             formData.append('branding_logo_size', document.getElementById('branding_logo_size').value);
             formData.append('heart_color', document.getElementById('heart_color').value);
+            formData.append('text_color', document.getElementById('text_color').value);
             formData.append('provide_all_images', provideAllImages.checked);
 
             if (provideAllImages.checked) {
@@ -1676,13 +1582,11 @@ SOMEWHERE, ST 67890</textarea>
             statusText.textContent = text;
             statusBar.classList.add('visible');
             generateBtn.disabled = true;
-            previewBtn.disabled = true;
         }
 
         function hideStatus() {
             statusBar.classList.remove('visible');
             generateBtn.disabled = false;
-            previewBtn.disabled = false;
         }
 
         function showError(text) {

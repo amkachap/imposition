@@ -198,53 +198,9 @@ PDF_PROFILES = [
     ''  # Default (no profile)
 ]
 
-# HeartStamp branding image for flat card back panel
-BRANDING_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'assets')
-BRANDING_IMG_CACHE = None
-
-
-def _load_branding_img():
-    """Load and crop branding PNG, cache the PIL Image."""
-    global BRANDING_IMG_CACHE
-    if BRANDING_IMG_CACHE is None:
-        branding_path = os.path.join(BRANDING_DIR, 'branding.png')
-        if os.path.exists(branding_path):
-            img = Image.open(branding_path).convert('RGBA')
-            bbox = img.split()[3].getbbox()
-            if bbox:
-                padding = 10
-                crop_box = (
-                    max(0, bbox[0] - padding),
-                    max(0, bbox[1] - padding),
-                    min(img.width, bbox[2] + padding),
-                    min(img.height, bbox[3] + padding),
-                )
-                img = img.crop(crop_box)
-            BRANDING_IMG_CACHE = img
-    return BRANDING_IMG_CACHE
-
-
-def get_branding_b64(heart_color=None):
-    """Get branding PNG as base64, optionally replacing the heart color."""
-    img = _load_branding_img()
-    if img is None:
-        return None
-
-    if heart_color:
-        img = img.copy()
-        pixels = img.load()
-        hr = int(heart_color[1:3], 16)
-        hg = int(heart_color[3:5], 16)
-        hb = int(heart_color[5:7], 16)
-        for y in range(img.height):
-            for x in range(img.width):
-                r, g, b, a = pixels[x, y]
-                if a > 50 and r > 140 and g < 100 and b < 100:
-                    pixels[x, y] = (hr, hg, hb, a)
-
-    buf = BytesIO()
-    img.save(buf, format='PNG')
-    return base64.b64encode(buf.getvalue()).decode('utf-8')
+def get_branding_svg(heart_color='#bd2231', text_color='#ffffff'):
+    """Generate HeartStamp branding SVG with configurable colors."""
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="{heart_color}" viewBox="0 0 140 35"><g clip-path="url(#hs_clip)"><path d="M32.28 3.2Q29.458 0 25.295 0q-4.199 0-7.655 4.04l-.16.173-.159-.173Q13.865 0 9.666 0 5.505 0 2.68 3.2.001 6.298 0 10.518q0 6.262 3.704 12.558 3.562 6.12 8.961 9.674.741.49 2.258 1.301c1.223.633 2.275.95 2.557.95s1.335-.317 2.558-.95q1.517-.81 2.258-1.3 5.4-3.555 8.961-9.675 3.704-6.295 3.704-12.558 0-4.22-2.681-7.316"/><path fill="{text_color}" d="M38.3 19.36c0 .418-.039.798-.066 1.076a.143.143 0 0 1-.143.128h-8.634a.144.144 0 0 0-.143.162c.325 2.473 1.765 3.529 3.376 3.529 1.089 0 1.964-.38 2.83-1.001a.145.145 0 0 1 .19.018l1.385 1.493a.144.144 0 0 1-.007.203c-1.162 1.067-2.554 1.67-4.552 1.67-3.165 0-5.84-2.537-5.84-6.996 0-4.562 2.418-7.022 5.917-7.022 3.834 0 5.686 3.101 5.686 6.74m-2.833-.974a.144.144 0 0 0 .144-.155c-.167-1.776-1.053-3.228-3.178-3.228-1.73 0-2.8 1.169-3.068 3.222a.144.144 0 0 0 .144.161zM50.325 26.356h-2.311a.144.144 0 0 1-.144-.143v-.857a.143.143 0 0 0-.24-.106c-.907.807-2.12 1.388-3.465 1.388-2.187 0-4.683-1.23-4.683-4.536 0-2.998 2.316-4.356 5.378-4.356 1.154 0 2.093.15 2.816.431a.143.143 0 0 0 .194-.134v-.784c0-1.461-.9-2.281-2.547-2.281-1.333 0-2.382.236-3.396.775a.144.144 0 0 1-.196-.06l-.9-1.749a.144.144 0 0 1 .053-.19c1.257-.748 2.669-1.134 4.516-1.134 3.01 0 5.069 1.46 5.069 4.51v9.083c0 .08-.065.143-.144.143M47.87 22.49v-1.783a.14.14 0 0 0-.081-.13c-.71-.336-1.62-.55-3.007-.55-1.698 0-2.778.77-2.778 2 0 1.332.849 2.229 2.598 2.229 1.394 0 2.613-.845 3.24-1.679a.14.14 0 0 0 .028-.087M60.988 13.286l-.62 2.239a.143.143 0 0 1-.2.09c-.521-.258-1.083-.407-1.879-.407-1.672 0-2.65 1.18-2.65 3.46v7.545c0 .08-.064.143-.144.143h-2.362a.144.144 0 0 1-.144-.143V13.045c0-.079.065-.143.144-.143h2.362c.08 0 .144.064.144.143v.724c0 .132.163.193.25.095.65-.732 1.664-1.244 2.838-1.244 1.021 0 1.675.183 2.2.507a.14.14 0 0 1 .061.16M69.445 23.965l-.263 1.985a.14.14 0 0 1-.074.108c-.639.34-1.514.58-2.535.58-1.878 0-3.035-1.153-3.035-3.562v-7.622a.144.144 0 0 0-.144-.143H61.66a.144.144 0 0 1-.14-.178l.521-2.122a.144.144 0 0 1 .14-.11h1.213c.079 0 .144-.063.144-.143V9.144c0-.053.029-.102.076-.127a5.8 5.8 0 0 0 2.31-1.23.15.15 0 0 1 .142.003c.04.024.07.069.07.123v4.845c0 .08.064.144.144.144h3.057c.08 0 .144.064.144.143v2.122c0 .08-.064.144-.144.144H66.28a.144.144 0 0 0-.144.143v7.16c0 1.256.412 1.615 1.39 1.615.59 0 1.235-.185 1.716-.413a.143.143 0 0 1 .203.149M84.249 21.205c0 3.23-2.059 5.433-6.664 5.433-2.573 0-4.8-1.084-6.317-2.793a.144.144 0 0 1 .009-.198l1.727-1.674a.144.144 0 0 1 .204.004C74.414 23.223 76.138 24 77.79 24c2.521 0 3.73-.871 3.73-2.614 0-1.384-1.055-2.076-4.065-2.973-3.808-1.127-5.634-2.075-5.634-5.279 0-3.1 2.624-4.997 5.943-4.997 2.39 0 4.214.857 5.785 2.333.059.055.06.148.003.206l-1.699 1.715a.144.144 0 0 1-.203 0c-1.108-1.084-2.37-1.615-4.092-1.615-2.11 0-3.01 1.025-3.01 2.23 0 1.256.823 1.87 3.936 2.793 3.55 1.077 5.764 2.204 5.764 5.408M92.96 23.965l-.263 1.985a.14.14 0 0 1-.074.108c-.639.34-1.514.58-2.535.58-1.878 0-3.036-1.153-3.036-3.562v-7.622a.144.144 0 0 0-.144-.143h-1.641a.144.144 0 0 1-.144-.144v-2.122c0-.079.064-.143.144-.143h1.641c.08 0 .144-.064.144-.144V9.144c0-.053.03-.102.076-.127a4.6 4.6 0 0 0 2.311-1.23.15.15 0 0 1 .142.003c.04.024.07.069.07.123v4.845c0 .08.064.144.144.144h3.057c.08 0 .144.064.144.143v2.122c0 .08-.065.144-.144.144h-3.057a.144.144 0 0 0-.144.143v7.16c0 1.256.412 1.615 1.39 1.615.59 0 1.235-.185 1.716-.413a.143.143 0 0 1 .203.149M105.124 26.356h-2.311a.144.144 0 0 1-.144-.143v-.857a.144.144 0 0 0-.24-.106c-.906.807-2.121 1.388-3.465 1.388-2.186 0-4.682-1.23-4.682-4.536 0-2.998 2.315-4.356 5.377-4.356 1.154 0 2.093.15 2.816.431a.143.143 0 0 0 .194-.134v-.784c0-1.461-.9-2.281-2.547-2.281-1.332 0-2.381.236-3.395.775a.144.144 0 0 1-.197-.06l-.9-1.749a.144.144 0 0 1 .054-.19c1.257-.748 2.668-1.134 4.516-1.134 3.01 0 5.068 1.46 5.068 4.51v9.083c0 .08-.065.143-.144.143m-2.455-3.867v-1.783a.14.14 0 0 0-.081-.13c-.709-.336-1.619-.55-3.006-.55-1.698 0-2.779.77-2.779 2 0 1.332.85 2.229 2.599 2.229 1.393 0 2.613-.845 3.239-1.679a.14.14 0 0 0 .028-.087M125.989 26.356h-2.362a.143.143 0 0 1-.144-.143v-7.468c0-2.717-.849-3.69-2.599-3.69-1.775 0-2.598 1.255-2.598 3.434v7.724c0 .079-.065.143-.144.143h-2.362a.143.143 0 0 1-.144-.143v-7.468c0-2.717-.849-3.69-2.599-3.69-1.775 0-2.599 1.255-2.599 3.434v7.724c0 .079-.064.143-.144.143h-2.362a.144.144 0 0 1-.144-.143V13.045c0-.079.065-.143.144-.143h2.362c.08 0 .144.064.144.143v.722c0 .132.164.194.251.095.688-.78 1.736-1.242 2.966-1.242 1.743 0 2.877.63 3.603 1.802a.144.144 0 0 0 .232.014c.943-1.114 1.996-1.816 4.012-1.816 3.138 0 4.631 2.05 4.631 6.022v7.57c0 .08-.065.144-.144.144M140 19.847c0 4.613-2.521 6.791-5.326 6.791-1.227 0-2.391-.58-3.156-1.294-.091-.085-.24-.018-.24.106v4.407c0 .054-.03.103-.077.128a4.44 4.44 0 0 0-2.337 1.209c-.004.002-.073.036-.141-.005a.14.14 0 0 1-.069-.123v-18.02c0-.08.064-.144.144-.144h2.336c.079 0 .144.064.144.144v.819c0 .122.144.188.237.108.923-.789 1.986-1.353 3.288-1.353 2.907 0 5.197 2.101 5.197 7.227m-2.65.077c0-3.383-1.081-4.87-3.036-4.87-1.242 0-2.333.821-3.03 1.678a.14.14 0 0 0-.032.091v5.564q0 .048.029.087c.603.787 1.82 1.73 3.136 1.73 1.904 0 2.933-1.435 2.933-4.28M24.178 8.415h-2.413a.144.144 0 0 0-.144.144v6.962a.143.143 0 0 1-.144.144 10.284 10.284 0 0 1-7.947.02l.003-.004q-.083-.038-.164-.078a.14.14 0 0 1-.029-.082v-7.12h-.002c-.058-2.91-2.844-3.24-4.52-2.81-2.06.528-3.776 3.207-2.677 6.038a10.02 10.02 0 0 0 4.499 5.412v9.162c0 .08.064.144.144.144h2.412c.08 0 .144-.064.144-.144v-7.705a.143.143 0 0 1 .144-.144 10.1 10.1 0 0 0 3.819.826 10.1 10.1 0 0 0 4.175-.826c.08 0 .143.065.143.144v7.705c0 .08.065.144.144.144h2.413c.08 0 .144-.065.144-.144V8.56a.144.144 0 0 0-.144-.144m-13.944 4.878A10.2 10.2 0 0 1 8.142 9.84c-.258-.802.177-1.14.51-1.166.398-.031.512.248.746 1.023.003.011.02.007.018-.004-.07-.42-.104-1.16.31-1.418.257-.159.57-.16.753.05.035.039.16.163.16.446v4.938q-.232-.226-.405-.416"/></g><defs><clipPath id="hs_clip"><path fill="#fff" d="M0 0h140v35H0z"/></clipPath></defs></svg>'''
 
 
 # Simulated inside panel content for folded cards
@@ -427,15 +383,16 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     # Branding overlay for flat card back panel
     include_branding = settings.get('include_branding', True)
     branding_height = float(settings.get('branding_height', 1.0))
-    heart_color = settings.get('heart_color', None)
-    branding_b64 = get_branding_b64(heart_color=heart_color) if include_branding else None
+    heart_color = settings.get('heart_color', '#bd2231')
+    text_color = settings.get('text_color', '#ffffff')
+    branding_svg = get_branding_svg(heart_color=heart_color, text_color=text_color) if include_branding else None
     branding_bg_html = ''
     branding_img_html = ''
     branding_css = ''
     
-    if branding_b64:
+    if branding_svg:
         branding_bg_html = '<div class="branding-bg"></div>'
-        branding_img_html = f'<div class="branding-img"><img src="data:image/png;base64,{branding_b64}" alt="HeartStamp"></div>'
+        branding_img_html = f'<div class="branding-img">{branding_svg}</div>'
         logo_size = float(settings.get('branding_logo_size', 0.30))
         logo_size = max(0.05, min(1.0, logo_size))
         branding_logo_width = card_width * logo_size
@@ -468,11 +425,9 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             z-index: 3;
         }}
         
-        .branding-img img {{
+        .branding-img svg {{
             width: 100%;
             height: 100%;
-            object-fit: contain;
-            object-position: center bottom;
             display: block;
         }}
         """
@@ -1131,7 +1086,8 @@ def generate_pdf():
         'include_branding': request.form.get('include_branding') == 'true',
         'branding_height': request.form.get('branding_height', '0.375'),
         'branding_logo_size': request.form.get('branding_logo_size', '0.30'),
-        'heart_color': request.form.get('heart_color', '') or None,
+        'heart_color': request.form.get('heart_color', '#bd2231'),
+        'text_color': request.form.get('text_color', '#ffffff'),
         'test_mode': request.form.get('test_mode') == 'true',
     }
     
@@ -1273,7 +1229,8 @@ def preview_html():
         'include_branding': request.form.get('include_branding') == 'true',
         'branding_height': request.form.get('branding_height', '0.375'),
         'branding_logo_size': request.form.get('branding_logo_size', '0.30'),
-        'heart_color': request.form.get('heart_color', '') or None,
+        'heart_color': request.form.get('heart_color', '#bd2231'),
+        'text_color': request.form.get('text_color', '#ffffff'),
     }
     
     # Envelope-specific settings
