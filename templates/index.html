@@ -742,7 +742,7 @@
 
                         <div class="form-group" id="brandingHeightGroup">
                             <label for="branding_height">Branding Background Height (inches)</label>
-                            <input type="number" id="branding_height" name="branding_height" value="0.375" min="0.25" max="3.0" step="0.125">
+                            <input type="number" id="branding_height" name="branding_height" value="0.25" min="0.125" max="3.0" step="0.125">
                             <p class="checkbox-description">Height of the branding background strip. Uses the Back Panel Color.</p>
                         </div>
                         <div class="form-group" id="brandingLogoSizeGroup">
@@ -1605,11 +1605,6 @@ SOMEWHERE, ST 67890</textarea>
             const container = document.getElementById('visualPreviewContainer');
             container.innerHTML = '';
 
-            const iframe = document.createElement('iframe');
-            iframe.style.border = '1px solid var(--border)';
-            iframe.style.borderRadius = 'var(--radius)';
-            iframe.style.background = '#fff';
-
             let html = lastPreviewHtml;
 
             if (showTrimmed) {
@@ -1617,7 +1612,7 @@ SOMEWHERE, ST 67890</textarea>
                     /<\/style>/,
                     `.page { overflow: hidden !important; }
                      .page-content, .back-page-bg { top: 0 !important; left: 0 !important; }
-                     .branding-bg { bottom: 0 !important; left: auto !important; }
+                     .branding-bg { bottom: 0 !important; }
                     </style>`
                 );
             }
@@ -1626,33 +1621,36 @@ SOMEWHERE, ST 67890</textarea>
             const isFolded = cardType.value === 'folded';
             const pageW = isEnvelope ? 7.25 : (isFolded ? 10.0 : 5.0);
             const pageH = isEnvelope ? 5.25 : 7.0;
-            const scale = Math.min(900 / (pageW * 96), 600 / (pageH * 96));
+            const numPages = isFolded ? 2 : 2;
+            const totalH = pageH * numPages;
+            const scale = Math.min(850 / (pageW * 96), 700 / (totalH * 96));
 
-            iframe.style.width = Math.ceil(pageW * 96 * scale) + 'px';
-            iframe.style.height = Math.ceil(pageH * 96 * scale * (isFolded ? 2.1 : 2.1)) + 'px';
+            const wrapper = document.createElement('div');
+            wrapper.style.width = Math.ceil(pageW * 96 * scale) + 'px';
+            wrapper.style.height = Math.ceil(totalH * 96 * scale) + 'px';
+            wrapper.style.overflow = 'hidden';
+            wrapper.style.borderRadius = '8px';
+            wrapper.style.border = '1px solid var(--border)';
+            wrapper.style.position = 'relative';
 
-            container.appendChild(iframe);
+            const iframe = document.createElement('iframe');
+            iframe.style.border = 'none';
+            iframe.style.background = '#fff';
+            iframe.style.transform = `scale(${scale})`;
+            iframe.style.transformOrigin = 'top left';
+            iframe.style.width = Math.ceil(pageW * 96) + 'px';
+            iframe.style.height = Math.ceil(totalH * 96) + 'px';
+            iframe.style.position = 'absolute';
+            iframe.style.top = '0';
+            iframe.style.left = '0';
+
+            wrapper.appendChild(iframe);
+            container.appendChild(wrapper);
 
             const doc = iframe.contentDocument || iframe.contentWindow.document;
             doc.open();
             doc.write(html);
             doc.close();
-
-            iframe.style.transform = `scale(${scale})`;
-            iframe.style.transformOrigin = 'top left';
-            iframe.style.width = Math.ceil(pageW * 96) + 'px';
-            iframe.style.height = Math.ceil(pageH * 96 * (isFolded ? 2.1 : 2.1)) + 'px';
-
-            const wrapper = document.createElement('div');
-            wrapper.style.width = Math.ceil(pageW * 96 * scale) + 'px';
-            wrapper.style.height = Math.ceil(pageH * 96 * scale * (isFolded ? 2.1 : 2.1)) + 'px';
-            wrapper.style.overflow = 'hidden';
-            wrapper.style.borderRadius = 'var(--radius)';
-            wrapper.style.border = '1px solid var(--border)';
-
-            container.innerHTML = '';
-            wrapper.appendChild(iframe);
-            container.appendChild(wrapper);
 
             if (showTrimmed) {
                 const label = document.createElement('p');

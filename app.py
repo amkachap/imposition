@@ -418,8 +418,8 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         logo_size = max(0.05, min(1.0, logo_size))
         branding_logo_width = card_width * logo_size
         branding_logo_left = (card_width - branding_logo_width) / 2
-        bg_pad_h = 0.1
-        bg_pad_v = 0.05
+        bg_pad_h = 0.04
+        bg_pad_v = 0.02
         branding_bg_width = branding_logo_width + (bg_pad_h * 2)
         branding_bg_left = (card_width - branding_bg_width) / 2
         branding_bg_height = branding_height + bg_pad_v + bleed
@@ -450,7 +450,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             width: 100%;
             height: 100%;
             object-fit: contain;
-            object-position: center;
+            object-position: center bottom;
             display: block;
         }}
         """
