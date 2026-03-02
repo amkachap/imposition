@@ -412,20 +412,21 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             z-index: 2;
         }}
         
-        /* Branding transparent PNG overlay - fills entire trim area */
+        /* Branding transparent PNG overlay - bottom strip within trim */
         .branding-img {{
             position: absolute;
-            top: 0;
+            bottom: 0;
             left: 0;
             width: {card_width}in;
-            height: {card_height}in;
+            height: {branding_height}in;
             z-index: 3;
         }}
         
         .branding-img img {{
             width: 100%;
             height: 100%;
-            object-fit: fill;
+            object-fit: contain;
+            object-position: center;
             display: block;
         }}
         """
