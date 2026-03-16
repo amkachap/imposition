@@ -17,7 +17,7 @@ from io import BytesIO
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
 import docraptor
-from PIL import Image
+from PIL import Image, ImageChops
 from collections import Counter
 
 app = Flask(__name__)
@@ -264,25 +264,31 @@ def get_dominant_color(image_data_base64, border_pct=0.12):
 
 def generate_pink_mask(image_data_base64, hue_min=300, hue_max=350, sat_min=0.4):
     """Generate grayscale mask for fluorescent pink: white=pink regions, black=else.
-    Hue in degrees (300-350 = magenta/pink), sat_min = min saturation (0-1).
-    Returns base64 PNG or None on error."""
+    Uses Pillow's C-based HSV conversion and channel operations for speed."""
     try:
         image_bytes = base64.b64decode(image_data_base64)
-        img = Image.open(BytesIO(image_bytes)).convert('RGB')
-        w, h = img.size
-        pixels = img.load()
-        mask_data = []
-        for y in range(h):
-            for x in range(w):
-                r, g, b = pixels[x, y]
-                h_norm, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-                hue_deg = h_norm * 360
-                in_range = (hue_min <= hue_deg <= hue_max or 0 <= hue_deg <= 20) and s >= sat_min and v >= 0.15
-                mask_data.append(255 if in_range else 0)
-        mask_img = Image.new('L', (w, h))
-        mask_img.putdata(mask_data)
+        img = Image.open(BytesIO(image_bytes)).convert('HSV')
+        h_ch, s_ch, v_ch = img.split()
+
+        # PIL HSV hue: 0-255 maps to 0-360 degrees
+        scale = 255.0 / 360.0
+        h_lo = int(hue_min * scale)   # 300° → ~213
+        h_wrap = int(20 * scale)      # 20°  → ~14
+        s_lo = int(sat_min * 255)     # 0.4  → ~102
+        v_lo = int(0.15 * 255)        # 0.15 → ~38
+
+        h_main = h_ch.point(lambda x: 255 if x >= h_lo else 0)
+        h_low = h_ch.point(lambda x: 255 if x <= h_wrap else 0)
+        s_ok = s_ch.point(lambda x: 255 if x >= s_lo else 0)
+        v_ok = v_ch.point(lambda x: 255 if x >= v_lo else 0)
+
+        h_ok = ImageChops.add(h_main, h_low)        # OR
+        mask = ImageChops.multiply(h_ok, s_ok)       # AND
+        mask = ImageChops.multiply(mask, v_ok)        # AND
+        mask = mask.point(lambda x: 255 if x > 0 else 0)
+
         buf = BytesIO()
-        mask_img.save(buf, format='PNG')
+        mask.save(buf, format='PNG')
         return base64.b64encode(buf.getvalue()).decode('utf-8')
     except Exception as e:
         print(f"Error generating pink mask: {e}")
@@ -368,13 +374,13 @@ def get_spot_color_css(settings):
     if print_mode == 'cmyk_silver':
         return """
         @prince-color SpotSilver {
-            alternate-color: cmyk(0 0 0 0.3);
+            alternate-color: cmyk(0, 0, 0, 0.3);
         }
         """
     if print_mode == 'fluorescent_pink':
         return """
         @prince-color FluorescentPink {
-            alternate-color: cmyk(0 0.85 0.35 0);
+            alternate-color: cmyk(0, 0.85, 0.35, 0);
         }
         """
     return ''
@@ -1440,34 +1446,6 @@ def _process_generate(form_data, files_data):
             'font_family': form_data.get('envelope_font', 'Caveat'),
         }
 
-    dpi_warnings = []
-    dims = PRINT_DIMENSIONS.get(card_type, PRINT_DIMENSIONS['flat'])
-
-    if image_data:
-        image_data, image_type, front_dpi = ensure_print_dpi(
-            image_data, image_type, dims['panel_w'], dims['panel_h']
-        )
-        if front_dpi.get('warning'):
-            dpi_warnings.append(f"Front: {front_dpi['warning']}")
-
-    if 'back' in additional_images:
-        back_img = additional_images['back']
-        back_img['data'], back_img['type'], back_dpi = ensure_print_dpi(
-            back_img['data'], back_img['type'], dims['panel_w'], dims['panel_h']
-        )
-        if back_dpi.get('warning'):
-            dpi_warnings.append(f"Back: {back_dpi['warning']}")
-
-    if 'inside' in additional_images:
-        inside_img = additional_images['inside']
-        spread_w = dims.get('spread_w', dims['panel_w'])
-        spread_h = dims.get('spread_h', dims['panel_h'])
-        inside_img['data'], inside_img['type'], inside_dpi = ensure_print_dpi(
-            inside_img['data'], inside_img['type'], spread_w, spread_h
-        )
-        if inside_dpi.get('warning'):
-            dpi_warnings.append(f"Inside: {inside_dpi['warning']}")
-
     html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
 
     pdf_content, error = create_pdf(html_content, settings, api_key)
@@ -1482,14 +1460,11 @@ def _process_generate(form_data, files_data):
     with open(temp_path, 'wb') as f:
         f.write(pdf_content)
 
-    result = {
+    return {
         'status': 'done',
         'result_path': temp_path,
         'filename': output_filename,
     }
-    if dpi_warnings:
-        result['dpi_warnings'] = ' | '.join(dpi_warnings)
-    return result
 
 
 @app.route('/preview-html', methods=['POST'])
@@ -1590,42 +1565,10 @@ def _preview_html_inner():
             'font_family': request.form.get('envelope_font', 'Caveat'),
         }
     
-    # Upscale images to meet 300 DPI print requirement
-    dpi_warnings = []
-    dims = PRINT_DIMENSIONS.get(card_type, PRINT_DIMENSIONS['flat'])
-    
-    if image_data:
-        image_data, image_type, front_dpi = ensure_print_dpi(
-            image_data, image_type, dims['panel_w'], dims['panel_h']
-        )
-        if front_dpi.get('warning'):
-            dpi_warnings.append(f"Front: {front_dpi['warning']}")
-    
-    if 'back' in additional_images:
-        back_img = additional_images['back']
-        back_img['data'], back_img['type'], back_dpi = ensure_print_dpi(
-            back_img['data'], back_img['type'], dims['panel_w'], dims['panel_h']
-        )
-        if back_dpi.get('warning'):
-            dpi_warnings.append(f"Back: {back_dpi['warning']}")
-    
-    if 'inside' in additional_images:
-        inside_img = additional_images['inside']
-        spread_w = dims.get('spread_w', dims['panel_w'])
-        spread_h = dims.get('spread_h', dims['panel_h'])
-        inside_img['data'], inside_img['type'], inside_dpi = ensure_print_dpi(
-            inside_img['data'], inside_img['type'], spread_w, spread_h
-        )
-        if inside_dpi.get('warning'):
-            dpi_warnings.append(f"Inside: {inside_dpi['warning']}")
-    
     # Generate HTML
     html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
     
-    result = {'html': html_content}
-    if dpi_warnings:
-        result['dpi_warnings'] = dpi_warnings
-    return jsonify(result)
+    return jsonify({'html': html_content})
 
 
 @app.route('/logs')
