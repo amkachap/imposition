@@ -3,7 +3,7 @@ services:
     name: imposition
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn --timeout 120 app:app
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
