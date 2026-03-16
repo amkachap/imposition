@@ -6,6 +6,8 @@ Flask app for print-ready PDFs (cards, invites, envelopes) via DocRaptor API.
 import os
 import base64
 import tempfile
+import traceback
+from datetime import datetime, timezone
 from io import BytesIO
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
@@ -14,6 +16,22 @@ from PIL import Image
 from collections import Counter
 
 app = Flask(__name__)
+
+ERROR_LOG = []
+MAX_LOG_ENTRIES = 50
+
+
+def log_error(route, error):
+    """Store error details in memory for the /logs endpoint."""
+    entry = {
+        'time': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
+        'route': route,
+        'error': str(error),
+        'traceback': traceback.format_exc(),
+    }
+    ERROR_LOG.append(entry)
+    if len(ERROR_LOG) > MAX_LOG_ENTRIES:
+        ERROR_LOG.pop(0)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
@@ -1093,7 +1111,14 @@ def delete_icc_profile(filename):
 @app.route('/generate', methods=['POST'])
 def generate_pdf():
     """Generate PDF with the specified settings."""
-    
+    try:
+        return _generate_pdf_inner()
+    except Exception as e:
+        log_error('/generate', e)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+def _generate_pdf_inner():
     # Get API key
     api_key = request.form.get('api_key', '').strip()
     if not api_key:
@@ -1263,7 +1288,14 @@ def generate_pdf():
 @app.route('/preview-html', methods=['POST'])
 def preview_html():
     """Preview the generated HTML without calling DocRaptor."""
-    
+    try:
+        return _preview_html_inner()
+    except Exception as e:
+        log_error('/preview-html', e)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+def _preview_html_inner():
     card_type = request.form.get('card_type', 'flat')
     
     # Get uploaded image (optional for envelope)
@@ -1384,6 +1416,30 @@ def preview_html():
     if dpi_warnings:
         result['dpi_warnings'] = dpi_warnings
     return jsonify(result)
+
+
+@app.route('/logs')
+def view_logs():
+    """View recent error logs."""
+    if not ERROR_LOG:
+        return '<html><body><h2>No errors logged</h2></body></html>'
+    rows = ''
+    for entry in reversed(ERROR_LOG):
+        tb = entry['traceback'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        rows += f'''<tr>
+            <td style="white-space:nowrap;vertical-align:top;padding:8px;border:1px solid #ddd">{entry['time']}</td>
+            <td style="vertical-align:top;padding:8px;border:1px solid #ddd"><code>{entry['route']}</code></td>
+            <td style="vertical-align:top;padding:8px;border:1px solid #ddd">{entry['error']}</td>
+            <td style="vertical-align:top;padding:8px;border:1px solid #ddd"><pre style="margin:0;font-size:12px;max-width:600px;overflow-x:auto">{tb}</pre></td>
+        </tr>'''
+    return f'''<html><head><title>Error Logs</title></head><body style="font-family:sans-serif;padding:20px">
+        <h2>Recent Errors ({len(ERROR_LOG)})</h2>
+        <table style="border-collapse:collapse;width:100%">
+        <tr><th style="padding:8px;border:1px solid #ddd;text-align:left">Time</th>
+            <th style="padding:8px;border:1px solid #ddd;text-align:left">Route</th>
+            <th style="padding:8px;border:1px solid #ddd;text-align:left">Error</th>
+            <th style="padding:8px;border:1px solid #ddd;text-align:left">Traceback</th></tr>
+        {rows}</table></body></html>'''
 
 
 if __name__ == '__main__':
