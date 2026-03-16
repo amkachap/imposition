@@ -7,7 +7,10 @@ import os
 import base64
 import colorsys
 import tempfile
+import threading
+import time
 import traceback
+import uuid
 from datetime import datetime, timezone
 from io import BytesIO
 from flask import Flask, render_template, request, send_file, jsonify
@@ -20,6 +23,23 @@ app = Flask(__name__)
 
 ERROR_LOG = []
 MAX_LOG_ENTRIES = 50
+
+JOBS = {}
+JOB_EXPIRY_SECONDS = 600
+
+
+def cleanup_old_jobs():
+    """Remove completed/failed jobs older than JOB_EXPIRY_SECONDS."""
+    now = time.time()
+    expired = [jid for jid, job in JOBS.items()
+               if now - job.get('created', 0) > JOB_EXPIRY_SECONDS]
+    for jid in expired:
+        job = JOBS.pop(jid, None)
+        if job and job.get('result_path'):
+            try:
+                os.remove(job['result_path'])
+            except OSError:
+                pass
 
 
 def log_error(route, error):
@@ -1224,138 +1244,180 @@ def delete_icc_profile(filename):
 
 @app.route('/generate', methods=['POST'])
 def generate_pdf():
-    """Generate PDF with the specified settings."""
+    """Accept upload, spawn background job, return job_id immediately."""
     try:
-        return _generate_pdf_inner()
+        form_data = dict(request.form)
+        files_data = {}
+        for key in request.files:
+            f = request.files[key]
+            if f.filename:
+                files_data[key] = {'data': f.read(), 'filename': f.filename}
+
+        job_id = str(uuid.uuid4())
+        JOBS[job_id] = {'status': 'processing', 'created': time.time()}
+
+        thread = threading.Thread(
+            target=_run_generate_job,
+            args=(job_id, form_data, files_data),
+            daemon=True,
+        )
+        thread.start()
+
+        cleanup_old_jobs()
+        return jsonify({'job_id': job_id})
     except Exception as e:
         log_error('/generate', e)
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
-def _generate_pdf_inner():
-    # Get API key
-    api_key = request.form.get('api_key', '').strip()
+@app.route('/job/<job_id>')
+def job_status(job_id):
+    """Poll endpoint: returns job status."""
+    job = JOBS.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    resp = {'status': job['status']}
+    if job['status'] == 'error':
+        resp['error'] = job.get('error', 'Unknown error')
+    if job.get('dpi_warnings'):
+        resp['dpi_warnings'] = job['dpi_warnings']
+    return jsonify(resp)
+
+
+@app.route('/job/<job_id>/download')
+def job_download(job_id):
+    """Download the finished PDF."""
+    job = JOBS.get(job_id)
+    if not job or job['status'] != 'done':
+        return jsonify({'error': 'Not ready'}), 404
+    return send_file(
+        job['result_path'],
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=job['filename'],
+    )
+
+
+def _run_generate_job(job_id, form_data, files_data):
+    """Background thread: run PDF generation and store result."""
+    try:
+        result = _process_generate(form_data, files_data)
+        JOBS[job_id].update(result)
+    except Exception as e:
+        log_error('/generate', e)
+        JOBS[job_id]['status'] = 'error'
+        JOBS[job_id]['error'] = str(e)
+
+
+def _process_generate(form_data, files_data):
+    """PDF generation logic using pre-captured form and file data."""
+    api_key = form_data.get('api_key', '').strip()
     if not api_key:
-        return jsonify({'error': 'DocRaptor API key is required'}), 400
-    
-    card_type = request.form.get('card_type', 'flat')
-    
-    # Get uploaded image (optional for envelope)
+        return {'status': 'error', 'error': 'DocRaptor API key is required'}
+
+    card_type = form_data.get('card_type', 'flat')
+
     image_data = None
     image_type = None
     front_image_name = 'envelope'
-    
-    has_image = 'image' in request.files and request.files['image'].filename != ''
-    
-    if has_image:
-        file = request.files['image']
-        if not allowed_file(file.filename):
-            return jsonify({'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}), 400
-        front_image_name = os.path.splitext(secure_filename(file.filename))[0]
-        image_data = base64.b64encode(file.read()).decode('utf-8')
-        image_type = file.filename.rsplit('.', 1)[1].lower()
+
+    if 'image' in files_data:
+        fi = files_data['image']
+        if not allowed_file(fi['filename']):
+            return {'status': 'error', 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'}
+        front_image_name = os.path.splitext(secure_filename(fi['filename']))[0]
+        image_data = base64.b64encode(fi['data']).decode('utf-8')
+        image_type = fi['filename'].rsplit('.', 1)[1].lower()
         if image_type == 'jpg':
             image_type = 'jpeg'
     elif card_type != 'envelope':
-        return jsonify({'error': 'No image file provided'}), 400
-    
-    # Process additional images if provide_all_images is checked
+        return {'status': 'error', 'error': 'No image file provided'}
+
     additional_images = {}
-    provide_all = request.form.get('provide_all_images') == 'true'
-    
+    provide_all = form_data.get('provide_all_images') == 'true'
+
     if provide_all:
-        # Get back image
-        if 'back_image' in request.files:
-            back_file = request.files['back_image']
-            if back_file.filename != '' and allowed_file(back_file.filename):
-                back_data = base64.b64encode(back_file.read()).decode('utf-8')
-                back_type = back_file.filename.rsplit('.', 1)[1].lower()
+        if 'back_image' in files_data:
+            fi = files_data['back_image']
+            if allowed_file(fi['filename']):
+                back_data = base64.b64encode(fi['data']).decode('utf-8')
+                back_type = fi['filename'].rsplit('.', 1)[1].lower()
                 if back_type == 'jpg':
                     back_type = 'jpeg'
                 additional_images['back'] = {'data': back_data, 'type': back_type}
-        
-        # Get inside image (only for folded cards)
-        if card_type == 'folded' and 'inside_image' in request.files:
-            inside_file = request.files['inside_image']
-            if inside_file.filename != '' and allowed_file(inside_file.filename):
-                inside_data = base64.b64encode(inside_file.read()).decode('utf-8')
-                inside_type = inside_file.filename.rsplit('.', 1)[1].lower()
+
+        if card_type == 'folded' and 'inside_image' in files_data:
+            fi = files_data['inside_image']
+            if allowed_file(fi['filename']):
+                inside_data = base64.b64encode(fi['data']).decode('utf-8')
+                inside_type = fi['filename'].rsplit('.', 1)[1].lower()
                 if inside_type == 'jpg':
                     inside_type = 'jpeg'
                 additional_images['inside'] = {'data': inside_data, 'type': inside_type}
-    
-    # Get ICC profile - either from new upload or existing saved profile
+
     icc_base64 = None
-    
-    # Check for new ICC profile upload
-    if 'icc_file' in request.files:
-        icc_file = request.files['icc_file']
-        if icc_file.filename != '' and icc_file.filename.lower().endswith('.icc'):
-            # Save the new profile
-            saved_filename = save_icc_profile(icc_file)
-            if saved_filename:
-                # Read it back as base64
-                icc_base64 = get_icc_profile_base64(saved_filename)
-    
-    # If no new upload, check for selected existing profile
+    if 'icc_file' in files_data:
+        fi = files_data['icc_file']
+        if fi['filename'].lower().endswith('.icc'):
+            filename = secure_filename(fi['filename'])
+            filepath = os.path.join(ICC_PROFILES_DIR, filename)
+            with open(filepath, 'wb') as f:
+                f.write(fi['data'])
+            icc_base64 = get_icc_profile_base64(filename)
+
     if not icc_base64:
-        selected_profile = request.form.get('icc_profile', '')
+        selected_profile = form_data.get('icc_profile', '')
         if selected_profile:
             icc_base64 = get_icc_profile_base64(selected_profile)
-    
-    # Build settings from form
-    print_mode = request.form.get('print_mode', 'cmyk')
+
+    print_mode = form_data.get('print_mode', 'cmyk')
     settings = {
         'card_type': card_type,
         'print_mode': print_mode,
-        'silver_front': request.form.get('silver_front') == 'true',
-        'silver_back': request.form.get('silver_back') == 'true',
-        'silver_inside': request.form.get('silver_inside') == 'true',
-        'pink_front': request.form.get('pink_front') == 'true',
-        'pink_back': request.form.get('pink_back') == 'true',
-        'pink_inside': request.form.get('pink_inside') == 'true',
-        'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
+        'silver_front': form_data.get('silver_front') == 'true',
+        'silver_back': form_data.get('silver_back') == 'true',
+        'silver_inside': form_data.get('silver_inside') == 'true',
+        'pink_front': form_data.get('pink_front') == 'true',
+        'pink_back': form_data.get('pink_back') == 'true',
+        'pink_inside': form_data.get('pink_inside') == 'true',
+        'pdf_profile': form_data.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,
-        'add_bleed': request.form.get('add_bleed') == 'true',
-        'include_crop_marks': request.form.get('include_crop_marks') == 'true',
-        'use_true_black': request.form.get('use_true_black') == 'true',
-        'use_cmyk_colors': request.form.get('use_cmyk_colors') == 'true',
-        'force_cmyk': request.form.get('force_cmyk') == 'true',
-        'image_fit': request.form.get('image_fit', 'cover'),
-        'background_color': request.form.get('background_color', '#ffffff'),
-        'include_branding': request.form.get('include_branding') == 'true',
-        'branding_height': request.form.get('branding_height', '0.25'),
-        'branding_logo_size': request.form.get('branding_logo_size', '0.15'),
-        'heart_color': request.form.get('heart_color', '#bd2231'),
-        'text_color': request.form.get('text_color', '#ffffff'),
-        'ai_color': request.form.get('ai_color', '#000000'),
-        'test_mode': request.form.get('test_mode') == 'true',
+        'add_bleed': form_data.get('add_bleed') == 'true',
+        'include_crop_marks': form_data.get('include_crop_marks') == 'true',
+        'use_true_black': form_data.get('use_true_black') == 'true',
+        'use_cmyk_colors': form_data.get('use_cmyk_colors') == 'true',
+        'force_cmyk': form_data.get('force_cmyk') == 'true',
+        'image_fit': form_data.get('image_fit', 'cover'),
+        'background_color': form_data.get('background_color', '#ffffff'),
+        'include_branding': form_data.get('include_branding') == 'true',
+        'branding_height': form_data.get('branding_height', '0.25'),
+        'branding_logo_size': form_data.get('branding_logo_size', '0.15'),
+        'heart_color': form_data.get('heart_color', '#bd2231'),
+        'text_color': form_data.get('text_color', '#ffffff'),
+        'ai_color': form_data.get('ai_color', '#000000'),
+        'test_mode': form_data.get('test_mode') == 'true',
     }
-    
-    # Envelope-specific settings
+
     if card_type == 'envelope':
         settings['envelope'] = {
-            'return_name': request.form.get('return_name', 'JOHN DOE'),
-            'return_address': request.form.get('return_address', '123 MAIN STREET\nANYTOWN, ST 12345'),
-            'delivery_name': request.form.get('delivery_name', 'JANE SMITH'),
-            'delivery_address': request.form.get('delivery_address', '456 OAK AVENUE APT 2B\nSOMEWHERE, ST 67890'),
-            'text_color': request.form.get('envelope_text_color', '#000000'),
-            'font_family': request.form.get('envelope_font', 'Caveat'),
+            'return_name': form_data.get('return_name', 'JOHN DOE'),
+            'return_address': form_data.get('return_address', '123 MAIN STREET\nANYTOWN, ST 12345'),
+            'delivery_name': form_data.get('delivery_name', 'JANE SMITH'),
+            'delivery_address': form_data.get('delivery_address', '456 OAK AVENUE APT 2B\nSOMEWHERE, ST 67890'),
+            'text_color': form_data.get('envelope_text_color', '#000000'),
+            'font_family': form_data.get('envelope_font', 'Caveat'),
         }
-    
-    # Upscale images to meet 300 DPI print requirement
+
     dpi_warnings = []
     dims = PRINT_DIMENSIONS.get(card_type, PRINT_DIMENSIONS['flat'])
-    
+
     if image_data:
-        panel_w = dims['panel_w']
-        panel_h = dims['panel_h']
         image_data, image_type, front_dpi = ensure_print_dpi(
-            image_data, image_type, panel_w, panel_h
+            image_data, image_type, dims['panel_w'], dims['panel_h']
         )
         if front_dpi.get('warning'):
             dpi_warnings.append(f"Front: {front_dpi['warning']}")
-    
+
     if 'back' in additional_images:
         back_img = additional_images['back']
         back_img['data'], back_img['type'], back_dpi = ensure_print_dpi(
@@ -1363,7 +1425,7 @@ def _generate_pdf_inner():
         )
         if back_dpi.get('warning'):
             dpi_warnings.append(f"Back: {back_dpi['warning']}")
-    
+
     if 'inside' in additional_images:
         inside_img = additional_images['inside']
         spread_w = dims.get('spread_w', dims['panel_w'])
@@ -1373,33 +1435,29 @@ def _generate_pdf_inner():
         )
         if inside_dpi.get('warning'):
             dpi_warnings.append(f"Inside: {inside_dpi['warning']}")
-    
-    # Generate HTML
+
     html_content = generate_html_for_image(image_data, image_type, settings, additional_images)
-    
-    # Create PDF
+
     pdf_content, error = create_pdf(html_content, settings, api_key)
-    
+
     if error:
-        return jsonify({'error': f'DocRaptor API error: {error}'}), 500
-    
-    # Save PDF to temp file and return
+        return {'status': 'error', 'error': f'DocRaptor API error: {error}'}
+
     pdf_profile_name = settings['pdf_profile'].replace('/', '-') if settings['pdf_profile'] else 'default'
     output_filename = f"{front_image_name}_{pdf_profile_name}.pdf"
     temp_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
-    
+
     with open(temp_path, 'wb') as f:
         f.write(pdf_content)
-    
-    response = send_file(
-        temp_path,
-        mimetype='application/pdf',
-        as_attachment=True,
-        download_name=output_filename
-    )
+
+    result = {
+        'status': 'done',
+        'result_path': temp_path,
+        'filename': output_filename,
+    }
     if dpi_warnings:
-        response.headers['X-DPI-Warnings'] = ' | '.join(dpi_warnings)
-    return response
+        result['dpi_warnings'] = ' | '.join(dpi_warnings)
+    return result
 
 
 @app.route('/preview-html', methods=['POST'])
