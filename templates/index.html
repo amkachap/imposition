@@ -653,6 +653,21 @@
                             <label for="silver_inside">Inside</label>
                         </div>
                     </div>
+                    <div id="pinkOptions" class="hidden">
+                        <p class="checkbox-description" style="margin-bottom: 8px;">Select which panels receive fluorescent pink (masked by pink hues in artwork):</p>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="pink_front" name="pink_front" checked>
+                            <label for="pink_front">Front</label>
+                        </div>
+                        <div class="checkbox-group" id="pinkBackGroup">
+                            <input type="checkbox" id="pink_back" name="pink_back" checked>
+                            <label for="pink_back">Back</label>
+                        </div>
+                        <div class="checkbox-group hidden" id="pinkInsideGroup">
+                            <input type="checkbox" id="pink_inside" name="pink_inside">
+                            <label for="pink_inside">Inside</label>
+                        </div>
+                    </div>
 
                     <hr>
                     <div class="section-header">Card Type (Imposition)</div>
@@ -1003,6 +1018,7 @@ SOMEWHERE, ST 67890</textarea>
         const cardTypeInfo = document.getElementById('cardTypeInfo');
         const printMode = document.getElementById('print_mode');
         const silverOptions = document.getElementById('silverOptions');
+        const pinkOptions = document.getElementById('pinkOptions');
 
         // Multi-image upload elements
         const provideAllImages = document.getElementById('provide_all_images');
@@ -1209,6 +1225,24 @@ SOMEWHERE, ST 67890</textarea>
                 } else {
                     silverBackGroup.classList.remove('hidden');
                     silverInsideGroup.classList.add('hidden');
+                }
+            }
+
+            // Pink options visibility
+            const isPink = printMode.value === 'fluorescent_pink';
+            pinkOptions.classList.toggle('hidden', !isPink);
+            if (isPink) {
+                const pinkInsideGroup = document.getElementById('pinkInsideGroup');
+                const pinkBackGroup = document.getElementById('pinkBackGroup');
+                if (isEnvelope) {
+                    pinkBackGroup.classList.add('hidden');
+                    pinkInsideGroup.classList.add('hidden');
+                } else if (isFolded) {
+                    pinkBackGroup.classList.remove('hidden');
+                    pinkInsideGroup.classList.remove('hidden');
+                } else {
+                    pinkBackGroup.classList.remove('hidden');
+                    pinkInsideGroup.classList.add('hidden');
                 }
             }
 
@@ -1438,6 +1472,9 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('silver_front', document.getElementById('silver_front').checked);
             formData.append('silver_back', document.getElementById('silver_back').checked);
             formData.append('silver_inside', document.getElementById('silver_inside').checked);
+            formData.append('pink_front', document.getElementById('pink_front').checked);
+            formData.append('pink_back', document.getElementById('pink_back').checked);
+            formData.append('pink_inside', document.getElementById('pink_inside').checked);
             formData.append('pdf_profile', document.getElementById('pdf_profile').value);
             formData.append('icc_profile', iccProfile.value);
             formData.append('add_bleed', addBleed.checked);
@@ -1530,6 +1567,9 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('silver_front', document.getElementById('silver_front').checked);
             formData.append('silver_back', document.getElementById('silver_back').checked);
             formData.append('silver_inside', document.getElementById('silver_inside').checked);
+            formData.append('pink_front', document.getElementById('pink_front').checked);
+            formData.append('pink_back', document.getElementById('pink_back').checked);
+            formData.append('pink_inside', document.getElementById('pink_inside').checked);
             formData.append('pdf_profile', document.getElementById('pdf_profile').value);
             formData.append('icc_profile', iccProfile.value);
             formData.append('add_bleed', addBleed.checked);

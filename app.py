@@ -5,6 +5,7 @@ Flask app for print-ready PDFs (cards, invites, envelopes) via DocRaptor API.
 
 import os
 import base64
+import colorsys
 import tempfile
 import traceback
 from datetime import datetime, timezone
@@ -203,6 +204,34 @@ def get_dominant_color(image_data_base64, border_pct=0.12):
         print(f"Error extracting dominant color: {e}")
         return "rgb(245, 245, 240)"
 
+
+def generate_pink_mask(image_data_base64, hue_min=300, hue_max=350, sat_min=0.4):
+    """Generate grayscale mask for fluorescent pink: white=pink regions, black=else.
+    Hue in degrees (300-350 = magenta/pink), sat_min = min saturation (0-1).
+    Returns base64 PNG or None on error."""
+    try:
+        image_bytes = base64.b64decode(image_data_base64)
+        img = Image.open(BytesIO(image_bytes)).convert('RGB')
+        w, h = img.size
+        pixels = img.load()
+        mask_data = []
+        for y in range(h):
+            for x in range(w):
+                r, g, b = pixels[x, y]
+                h_norm, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                hue_deg = h_norm * 360
+                in_range = (hue_min <= hue_deg <= hue_max or 0 <= hue_deg <= 20) and s >= sat_min and v >= 0.15
+                mask_data.append(255 if in_range else 0)
+        mask_img = Image.new('L', (w, h))
+        mask_img.putdata(mask_data)
+        buf = BytesIO()
+        mask_img.save(buf, format='PNG')
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
+    except Exception as e:
+        print(f"Error generating pink mask: {e}")
+        return None
+
+
 # PDF profiles available in DocRaptor/Prince
 PDF_PROFILES = [
     'PDF/X-4',
@@ -285,6 +314,12 @@ def get_spot_color_css(settings):
             alternate-color: cmyk(0 0 0 0.3);
         }
         """
+    if print_mode == 'fluorescent_pink':
+        return """
+        @prince-color FluorescentPink {
+            alternate-color: cmyk(0 0.85 0.35 0);
+        }
+        """
     return ''
 
 
@@ -299,6 +334,25 @@ def get_silver_layer_css(bleed, total_width, total_height):
             height: {total_height}in;
             background-color: prince-color(SpotSilver, overprint);
             z-index: 0;
+        }}
+    """
+
+
+def get_fluorescent_layer_css(bleed, total_width, total_height):
+    """Generate base CSS for fluorescent pink layer. Mask applied inline per panel."""
+    return f"""
+        .fluorescent-layer {{
+            position: absolute;
+            top: -{bleed}in;
+            left: -{bleed}in;
+            width: {total_width}in;
+            height: {total_height}in;
+            background-color: prince-color(FluorescentPink, overprint);
+            mask-size: 100% 100%;
+            mask-mode: luminance;
+            -webkit-mask-size: 100% 100%;
+            -webkit-mask-mode: luminance;
+            z-index: 1;
         }}
     """
 
@@ -526,6 +580,22 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     silver_front_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_front') else ''
     silver_back_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_back') else ''
 
+    # Fluorescent pink spot color support
+    is_pink = settings.get('print_mode') == 'fluorescent_pink'
+    pink_front_html = ''
+    pink_back_html = ''
+    pink_css = ''
+    if is_pink:
+        pink_css = get_fluorescent_layer_css(bleed, total_width, total_height)
+        if settings.get('pink_front') and image_data:
+            front_mask = generate_pink_mask(image_data)
+            if front_mask:
+                pink_front_html = f'<div class="fluorescent-layer" style="mask-image: url(\'data:image/png;base64,{front_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{front_mask}\');"></div>'
+        if settings.get('pink_back') and back_image_data:
+            back_mask = generate_pink_mask(back_image_data)
+            if back_mask:
+                pink_back_html = f'<div class="fluorescent-layer" style="mask-image: url(\'data:image/png;base64,{back_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{back_mask}\');"></div>'
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -592,6 +662,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         }}
         
         {silver_css}
+        {pink_css}
         {branding_css}
     </style>
 </head>
@@ -602,6 +673,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         <div class="page-content">
             <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Card Front">
         </div>
+        {pink_front_html}
     </div>
     
     <!-- Page 2: Back -->
@@ -612,6 +684,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         </div>
         {branding_bg_html}
         {branding_img_html}
+        {pink_back_html}
     </div>
 </body>
 </html>"""
@@ -669,6 +742,42 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     silver_outside = settings.get('silver_front') or settings.get('silver_back')
     silver_outside_html = '<div class="silver-base"></div>' if is_silver and silver_outside else ''
     silver_inside_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_inside') else ''
+
+    # Fluorescent pink spot color support
+    is_pink = settings.get('print_mode') == 'fluorescent_pink'
+    half_w = total_spread_width / 2
+    pink_css = ''
+    pink_outside_left_html = ''
+    pink_outside_right_html = ''
+    pink_inside_html = ''
+    if is_pink:
+        pink_css = get_fluorescent_layer_css(bleed, total_spread_width, total_spread_height)
+        pink_css += f"""
+        .fluorescent-layer-panel {{
+            position: absolute;
+            top: -{bleed}in;
+            width: {half_w}in;
+            height: {total_spread_height}in;
+            background-color: prince-color(FluorescentPink, overprint);
+            mask-size: 100% 100%;
+            mask-mode: luminance;
+            -webkit-mask-size: 100% 100%;
+            -webkit-mask-mode: luminance;
+            z-index: 1;
+        }}
+        """
+        if settings.get('pink_back') and back_image_data:
+            back_mask = generate_pink_mask(back_image_data)
+            if back_mask:
+                pink_outside_left_html = f'<div class="fluorescent-layer-panel" style="left: -{bleed}in; mask-image: url(\'data:image/png;base64,{back_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{back_mask}\');"></div>'
+        if settings.get('pink_front') and image_data:
+            front_mask = generate_pink_mask(image_data)
+            if front_mask:
+                pink_outside_right_html = f'<div class="fluorescent-layer-panel" style="left: {half_w - bleed}in; mask-image: url(\'data:image/png;base64,{front_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{front_mask}\');"></div>'
+        if settings.get('pink_inside') and inside_image_data:
+            inside_mask = generate_pink_mask(inside_image_data)
+            if inside_mask:
+                pink_inside_html = f'<div class="fluorescent-layer" style="mask-image: url(\'data:image/png;base64,{inside_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{inside_mask}\');"></div>'
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -755,6 +864,7 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
         }}
 
         {silver_css}
+        {pink_css}
     </style>
 </head>
 <body>
@@ -762,6 +872,8 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     <!-- When printed and folded, Panel 1 becomes front cover, Panel 4 becomes back -->
     <div class="spread">
         {silver_outside_html}
+        {pink_outside_left_html}
+        {pink_outside_right_html}
         <div class="spread-content">
             <!-- Panel 4: Back Cover (left side of spread) -->
             <div class="panel">
@@ -782,6 +894,7 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     <!-- Spread 2: Inside (Panel 2 left | Panel 3 right) -->
     <div class="spread">
         {silver_inside_html}
+        {pink_inside_html}
         <div class="spread-content">
             <!-- Panel 2: Inside Left -->
             <div class="panel">
@@ -1198,6 +1311,9 @@ def _generate_pdf_inner():
         'silver_front': request.form.get('silver_front') == 'true',
         'silver_back': request.form.get('silver_back') == 'true',
         'silver_inside': request.form.get('silver_inside') == 'true',
+        'pink_front': request.form.get('pink_front') == 'true',
+        'pink_back': request.form.get('pink_back') == 'true',
+        'pink_inside': request.form.get('pink_inside') == 'true',
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,
         'add_bleed': request.form.get('add_bleed') == 'true',
@@ -1354,6 +1470,9 @@ def _preview_html_inner():
         'silver_front': request.form.get('silver_front') == 'true',
         'silver_back': request.form.get('silver_back') == 'true',
         'silver_inside': request.form.get('silver_inside') == 'true',
+        'pink_front': request.form.get('pink_front') == 'true',
+        'pink_back': request.form.get('pink_back') == 'true',
+        'pink_inside': request.form.get('pink_inside') == 'true',
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,
         'add_bleed': request.form.get('add_bleed') == 'true',
