@@ -258,6 +258,33 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def get_spot_color_css(settings):
+    """Generate @prince-color declarations for spot colors based on print mode."""
+    print_mode = settings.get('print_mode', 'cmyk')
+    if print_mode == 'cmyk_silver':
+        return """
+        @prince-color SpotSilver {
+            alternate-color: cmyk(0 0 0 0.3);
+        }
+        """
+    return ''
+
+
+def get_silver_layer_css(bleed, total_width, total_height):
+    """Generate CSS for the silver base layer."""
+    return f"""
+        .silver-base {{
+            position: absolute;
+            top: -{bleed}in;
+            left: -{bleed}in;
+            width: {total_width}in;
+            height: {total_height}in;
+            background-color: prince-color(SpotSilver, overprint);
+            z-index: 0;
+        }}
+    """
+
+
 def get_prince_pdf_css(settings):
     """Generate @prince-pdf CSS block based on settings."""
     prince_pdf_css = []
@@ -474,11 +501,19 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         }}
         """
     
+    # Silver spot color support
+    spot_color_css = get_spot_color_css(settings)
+    is_silver = settings.get('print_mode') == 'cmyk_silver'
+    silver_css = get_silver_layer_css(bleed, total_width, total_height) if is_silver else ''
+    silver_front_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_front') else ''
+    silver_back_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_back') else ''
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <style>
+        {spot_color_css}
         {prince_pdf_block}
         
         @page {{
@@ -537,12 +572,14 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             z-index: 1;
         }}
         
+        {silver_css}
         {branding_css}
     </style>
 </head>
 <body>
     <!-- Page 1: Front (uploaded image) -->
     <div class="page">
+        {silver_front_html}
         <div class="page-content">
             <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Card Front">
         </div>
@@ -550,6 +587,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     
     <!-- Page 2: Back -->
     <div class="page">
+        {silver_back_html}
         <div class="back-page-bg">
             {back_bg_content}
         </div>
@@ -605,11 +643,20 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
         # Show fold indicator for placeholder content
         inside_fold_indicator = '<div class="fold-indicator"></div>'
     
+    # Silver spot color support
+    spot_color_css = get_spot_color_css(settings)
+    is_silver = settings.get('print_mode') == 'cmyk_silver'
+    silver_css = get_silver_layer_css(bleed, total_spread_width, total_spread_height) if is_silver else ''
+    silver_outside = settings.get('silver_front') or settings.get('silver_back')
+    silver_outside_html = '<div class="silver-base"></div>' if is_silver and silver_outside else ''
+    silver_inside_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_inside') else ''
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <style>
+        {spot_color_css}
         {prince_pdf_block}
         
         @page {{
@@ -687,12 +734,15 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
             border-left: 0.5px dashed rgba(200, 200, 200, 0.5);
             z-index: 10;
         }}
+
+        {silver_css}
     </style>
 </head>
 <body>
     <!-- Spread 1: Outside (Panel 4 left | Panel 1 right) -->
     <!-- When printed and folded, Panel 1 becomes front cover, Panel 4 becomes back -->
     <div class="spread">
+        {silver_outside_html}
         <div class="spread-content">
             <!-- Panel 4: Back Cover (left side of spread) -->
             <div class="panel">
@@ -712,6 +762,7 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     
     <!-- Spread 2: Inside (Panel 2 left | Panel 3 right) -->
     <div class="spread">
+        {silver_inside_html}
         <div class="spread-content">
             <!-- Panel 2: Inside Left -->
             <div class="panel">
@@ -1114,10 +1165,15 @@ def generate_pdf():
             icc_base64 = get_icc_profile_base64(selected_profile)
     
     # Build settings from form
+    print_mode = request.form.get('print_mode', 'cmyk')
     settings = {
         'card_type': card_type,
+        'print_mode': print_mode,
+        'silver_front': request.form.get('silver_front') == 'true',
+        'silver_back': request.form.get('silver_back') == 'true',
+        'silver_inside': request.form.get('silver_inside') == 'true',
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
-        'icc_base64': icc_base64,  # Base64 encoded ICC file
+        'icc_base64': icc_base64,
         'add_bleed': request.form.get('add_bleed') == 'true',
         'include_crop_marks': request.form.get('include_crop_marks') == 'true',
         'use_true_black': request.form.get('use_true_black') == 'true',
@@ -1261,6 +1317,10 @@ def preview_html():
     # Build settings from form
     settings = {
         'card_type': card_type,
+        'print_mode': request.form.get('print_mode', 'cmyk'),
+        'silver_front': request.form.get('silver_front') == 'true',
+        'silver_back': request.form.get('silver_back') == 'true',
+        'silver_inside': request.form.get('silver_inside') == 'true',
         'pdf_profile': request.form.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,
         'add_bleed': request.form.get('add_bleed') == 'true',

@@ -7,19 +7,19 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@400;700&family=Patrick+Hand&family=Indie+Flower&family=Architects+Daughter&family=Shadows+Into+Light&family=Kalam:wght@400;700&family=Handlee&family=Coming+Soon&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0a0a0b;
-            --bg-secondary: #141416;
-            --bg-tertiary: #1c1c1f;
-            --border: #2a2a2e;
-            --border-hover: #3a3a3e;
-            --text-primary: #fafafa;
-            --text-secondary: #a1a1a6;
-            --text-muted: #6b6b70;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-tertiary: #eaeaea;
+            --border: #d0d0d5;
+            --border-hover: #b0b0b5;
+            --text-primary: #1a1a1a;
+            --text-secondary: #555560;
+            --text-muted: #8a8a90;
             --accent: #3b82f6;
             --accent-hover: #2563eb;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --error: #ef4444;
+            --success: #16a34a;
+            --warning: #d97706;
+            --error: #dc2626;
             --radius: 8px;
             --radius-lg: 12px;
         }
@@ -625,6 +625,36 @@
                     </div>
 
                     <hr>
+                    <div class="section-header">Print Mode</div>
+
+                    <div class="form-group">
+                        <label for="print_mode">File Type</label>
+                        <select id="print_mode" name="print_mode">
+                            <option value="cmyk" selected>CMYK</option>
+                            <option value="cmyk_silver">CMYK + Silver</option>
+                            <option value="fluorescent_pink">Fluorescent Pink</option>
+                            <option value="foil">Foil (Gold)</option>
+                            <option value="extended_violet">Extended Gamut (Violet)</option>
+                        </select>
+                    </div>
+
+                    <div id="silverOptions" class="hidden">
+                        <p class="checkbox-description" style="margin-bottom: 8px;">Select which panels receive a full-bleed silver base layer:</p>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="silver_front" name="silver_front" checked>
+                            <label for="silver_front">Front</label>
+                        </div>
+                        <div class="checkbox-group" id="silverBackGroup">
+                            <input type="checkbox" id="silver_back" name="silver_back" checked>
+                            <label for="silver_back">Back</label>
+                        </div>
+                        <div class="checkbox-group hidden" id="silverInsideGroup">
+                            <input type="checkbox" id="silver_inside" name="silver_inside">
+                            <label for="silver_inside">Inside</label>
+                        </div>
+                    </div>
+
+                    <hr>
                     <div class="section-header">Card Type (Imposition)</div>
 
                     <div class="form-group">
@@ -667,7 +697,7 @@
                             <select id="icc_profile" name="icc_profile">
                                 <option value="">-- No profile selected --</option>
                                 {% for profile in icc_profiles %}
-                                <option value="{{ profile.filename }}">{{ profile.name }}</option>
+                                <option value="{{ profile.filename }}" {% if 'gracol' in profile.name|lower or 'gracol' in profile.filename|lower %}selected{% endif %}>{{ profile.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -971,7 +1001,9 @@ SOMEWHERE, ST 67890</textarea>
         const outputSummary = document.getElementById('outputSummary');
         const cardType = document.getElementById('card_type');
         const cardTypeInfo = document.getElementById('cardTypeInfo');
-        
+        const printMode = document.getElementById('print_mode');
+        const silverOptions = document.getElementById('silverOptions');
+
         // Multi-image upload elements
         const provideAllImages = document.getElementById('provide_all_images');
         const insideImageGroup = document.getElementById('insideImageGroup');
@@ -1162,8 +1194,30 @@ SOMEWHERE, ST 67890</textarea>
                 }
             }
             
+            // Silver options visibility
+            const isSilver = printMode.value === 'cmyk_silver';
+            silverOptions.classList.toggle('hidden', !isSilver);
+            if (isSilver) {
+                const silverInsideGroup = document.getElementById('silverInsideGroup');
+                const silverBackGroup = document.getElementById('silverBackGroup');
+                if (isEnvelope) {
+                    silverBackGroup.classList.add('hidden');
+                    silverInsideGroup.classList.add('hidden');
+                } else if (isFolded) {
+                    silverBackGroup.classList.remove('hidden');
+                    silverInsideGroup.classList.remove('hidden');
+                } else {
+                    silverBackGroup.classList.remove('hidden');
+                    silverInsideGroup.classList.add('hidden');
+                }
+            }
+
             updateSummary();
         }
+
+        printMode.addEventListener('change', () => {
+            updateImageUploadVisibility();
+        });
 
         // ICC Profile upload handling
         iccUploadArea.addEventListener('click', () => iccFileInput.click());
@@ -1379,7 +1433,11 @@ SOMEWHERE, ST 67890</textarea>
             const formData = new FormData();
             formData.append('api_key', document.getElementById('api_key').value);
             formData.append('image', imageInput.files[0]);
+            formData.append('print_mode', printMode.value);
             formData.append('card_type', cardType.value);
+            formData.append('silver_front', document.getElementById('silver_front').checked);
+            formData.append('silver_back', document.getElementById('silver_back').checked);
+            formData.append('silver_inside', document.getElementById('silver_inside').checked);
             formData.append('pdf_profile', document.getElementById('pdf_profile').value);
             formData.append('icc_profile', iccProfile.value);
             formData.append('add_bleed', addBleed.checked);
@@ -1467,7 +1525,11 @@ SOMEWHERE, ST 67890</textarea>
 
             const formData = new FormData();
             formData.append('image', imageInput.files[0]);
+            formData.append('print_mode', printMode.value);
             formData.append('card_type', cardType.value);
+            formData.append('silver_front', document.getElementById('silver_front').checked);
+            formData.append('silver_back', document.getElementById('silver_back').checked);
+            formData.append('silver_inside', document.getElementById('silver_inside').checked);
             formData.append('pdf_profile', document.getElementById('pdf_profile').value);
             formData.append('icc_profile', iccProfile.value);
             formData.append('add_bleed', addBleed.checked);
