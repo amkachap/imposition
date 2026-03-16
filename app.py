@@ -569,6 +569,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             width: {total_width}in;
             height: {total_height}in;
             background-color: {bg_color};
+            z-index: 1;
         }}
         
         .image {{
