@@ -3,6 +3,7 @@ DocRaptor PDF Output Tester
 Flask app for print-ready PDFs (cards, invites, envelopes) via DocRaptor API.
 """
 
+import json as _json
 import os
 import base64
 import colorsys
@@ -24,22 +25,58 @@ app = Flask(__name__)
 ERROR_LOG = []
 MAX_LOG_ENTRIES = 50
 
-JOBS = {}
+JOBS_DIR = os.path.join(tempfile.gettempdir(), 'docraptor_jobs')
+os.makedirs(JOBS_DIR, exist_ok=True)
 JOB_EXPIRY_SECONDS = 600
 
 
+def _job_meta_path(job_id):
+    return os.path.join(JOBS_DIR, f'{job_id}.json')
+
+
+def get_job(job_id):
+    path = _job_meta_path(job_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r') as f:
+            return _json.load(f)
+    except Exception:
+        return None
+
+
+def set_job(job_id, data):
+    path = _job_meta_path(job_id)
+    with open(path, 'w') as f:
+        _json.dump(data, f)
+
+
 def cleanup_old_jobs():
-    """Remove completed/failed jobs older than JOB_EXPIRY_SECONDS."""
+    """Remove job metadata and PDF files older than JOB_EXPIRY_SECONDS."""
     now = time.time()
-    expired = [jid for jid, job in JOBS.items()
-               if now - job.get('created', 0) > JOB_EXPIRY_SECONDS]
-    for jid in expired:
-        job = JOBS.pop(jid, None)
-        if job and job.get('result_path'):
-            try:
-                os.remove(job['result_path'])
-            except OSError:
-                pass
+    try:
+        for fname in os.listdir(JOBS_DIR):
+            if not fname.endswith('.json'):
+                continue
+            fpath = os.path.join(JOBS_DIR, fname)
+            if now - os.path.getmtime(fpath) > JOB_EXPIRY_SECONDS:
+                job = None
+                try:
+                    with open(fpath, 'r') as f:
+                        job = _json.load(f)
+                except Exception:
+                    pass
+                if job and job.get('result_path'):
+                    try:
+                        os.remove(job['result_path'])
+                    except OSError:
+                        pass
+                try:
+                    os.remove(fpath)
+                except OSError:
+                    pass
+    except Exception:
+        pass
 
 
 def log_error(route, error):
@@ -744,15 +781,20 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     
     # Determine inside panel content (spans both Panel 2 and Panel 3)
     if inside_image_data and inside_image_type:
-        # Single image spans both inside panels - left panel shows left half, right panel shows right half
-        inside_left_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Left" style="object-position: left center;">'
-        inside_right_content = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside Right" style="object-position: right center;">'
-        # No fold indicator needed when using custom inside images
+        inside_spread_inner = f'<img class="image" src="data:image/{inside_image_type};base64,{inside_image_data}" alt="Inside">'
         inside_fold_indicator = ''
     else:
-        inside_left_content = INSIDE_LEFT_CONTENT
-        inside_right_content = INSIDE_RIGHT_CONTENT
-        # Show fold indicator for placeholder content
+        inside_spread_inner = f"""
+            <div class="panel">
+                <div class="panel-inner">
+                    {INSIDE_LEFT_CONTENT}
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-inner">
+                    {INSIDE_RIGHT_CONTENT}
+                </div>
+            </div>"""
         inside_fold_indicator = '<div class="fold-indicator"></div>'
     
     # Silver spot color support
@@ -916,18 +958,7 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
         {silver_inside_html}
         {pink_inside_html}
         <div class="spread-content">
-            <!-- Panel 2: Inside Left -->
-            <div class="panel">
-                <div class="panel-inner">
-                    {inside_left_content}
-                </div>
-            </div>
-            <!-- Panel 3: Inside Right -->
-            <div class="panel">
-                <div class="panel-inner">
-                    {inside_right_content}
-                </div>
-            </div>
+            {inside_spread_inner}
         </div>
         {inside_fold_indicator}
     </div>
@@ -1254,7 +1285,7 @@ def generate_pdf():
                 files_data[key] = {'data': f.read(), 'filename': f.filename}
 
         job_id = str(uuid.uuid4())
-        JOBS[job_id] = {'status': 'processing', 'created': time.time()}
+        set_job(job_id, {'status': 'processing', 'created': time.time()})
 
         thread = threading.Thread(
             target=_run_generate_job,
@@ -1273,7 +1304,7 @@ def generate_pdf():
 @app.route('/job/<job_id>')
 def job_status(job_id):
     """Poll endpoint: returns job status."""
-    job = JOBS.get(job_id)
+    job = get_job(job_id)
     if not job:
         return jsonify({'error': 'Job not found'}), 404
     resp = {'status': job['status']}
@@ -1287,7 +1318,7 @@ def job_status(job_id):
 @app.route('/job/<job_id>/download')
 def job_download(job_id):
     """Download the finished PDF."""
-    job = JOBS.get(job_id)
+    job = get_job(job_id)
     if not job or job['status'] != 'done':
         return jsonify({'error': 'Not ready'}), 404
     return send_file(
@@ -1302,11 +1333,12 @@ def _run_generate_job(job_id, form_data, files_data):
     """Background thread: run PDF generation and store result."""
     try:
         result = _process_generate(form_data, files_data)
-        JOBS[job_id].update(result)
+        job = get_job(job_id) or {}
+        job.update(result)
+        set_job(job_id, job)
     except Exception as e:
         log_error('/generate', e)
-        JOBS[job_id]['status'] = 'error'
-        JOBS[job_id]['error'] = str(e)
+        set_job(job_id, {'status': 'error', 'error': str(e)})
 
 
 def _process_generate(form_data, files_data):
