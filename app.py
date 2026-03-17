@@ -295,9 +295,10 @@ def get_dominant_color(image_data_base64, border_pct=0.12):
         return "rgb(245, 245, 240)"
 
 
-def generate_pink_mask(image_data_base64):
+def generate_pink_mask(image_data_base64, sensitivity=5):
     """Generate a soft grayscale mask isolating fluorescent/hot-pink regions.
 
+    sensitivity: 1–10 (1 = only vivid fluorescent pink, 10 = catches softer pinks).
     Tightened HSV thresholds reject warm neutrals (skin, beige, parchment,
     rust).  Morphological open/close removes noise, and a Gaussian blur
     feathers the edges so the spot-color transition looks natural in print.
@@ -305,10 +306,11 @@ def generate_pink_mask(image_data_base64):
     Returns (base64_png, width, height) or (None, 0, 0) on error.
     """
     # --- Tunable thresholds (PIL HSV: H 0-255→0-360°, S/V 0-255) ----------
+    # sensitivity 1→S_MIN 180 (very strict), sensitivity 10→S_MIN 60 (loose)
     HUE_SCALE = 255.0 / 360.0
     H_MAIN_LO = int(300 * HUE_SCALE)   # 300° → ~213  (magenta → red)
     H_WRAP_HI = int(10 * HUE_SCALE)    # 10°  → ~7    (red → warm-pink)
-    S_MIN     = 128                      # ~50 % – excludes skin/beige/parchment
+    S_MIN     = int(180 - (sensitivity - 1) * (120 / 9))  # maps 1→180, 10→60
     V_MIN     = 100                      # ~39 % – excludes dark browns/reds
     MORPH_ITERATIONS = 2
     ERODE_SIZE       = 5                 # safety-buffer erosion kernel (px)
@@ -763,12 +765,13 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     pink_back_html = ''
     if is_pink:
         pos_full = f"top:-{bleed}in;left:-{bleed}in;width:{total_width}in;height:{total_height}in;"
+        pink_sens = settings.get('pink_sensitivity', 5)
         if settings.get('pink_front') and image_data:
-            front_mask, fm_w, fm_h = generate_pink_mask(image_data)
+            front_mask, fm_w, fm_h = generate_pink_mask(image_data, sensitivity=pink_sens)
             if front_mask:
                 pink_front_html = generate_fluorescent_svg(front_mask, 'pink-mask-front', fm_w, fm_h, pos_full)
         if settings.get('pink_back') and back_image_data:
-            back_mask, bm_w, bm_h = generate_pink_mask(back_image_data)
+            back_mask, bm_w, bm_h = generate_pink_mask(back_image_data, sensitivity=pink_sens)
             if back_mask:
                 pink_back_html = generate_fluorescent_svg(back_mask, 'pink-mask-back', bm_w, bm_h, pos_full)
 
@@ -960,18 +963,19 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     pink_outside_right_html = ''
     pink_inside_html = ''
     if is_pink:
+        pink_sens = settings.get('pink_sensitivity', 5)
         if settings.get('pink_back') and back_image_data:
-            back_mask, bm_w, bm_h = generate_pink_mask(back_image_data)
+            back_mask, bm_w, bm_h = generate_pink_mask(back_image_data, sensitivity=pink_sens)
             if back_mask:
                 pos_left = f"top:-{bleed}in;left:-{bleed}in;width:{half_w}in;height:{total_spread_height}in;"
                 pink_outside_left_html = generate_fluorescent_svg(back_mask, 'pink-mask-outside-left', bm_w, bm_h, pos_left)
         if settings.get('pink_front') and image_data:
-            front_mask, fm_w, fm_h = generate_pink_mask(image_data)
+            front_mask, fm_w, fm_h = generate_pink_mask(image_data, sensitivity=pink_sens)
             if front_mask:
                 pos_right = f"top:-{bleed}in;left:{half_w - bleed}in;width:{half_w}in;height:{total_spread_height}in;"
                 pink_outside_right_html = generate_fluorescent_svg(front_mask, 'pink-mask-outside-right', fm_w, fm_h, pos_right)
         if settings.get('pink_inside') and inside_image_data:
-            inside_mask, im_w, im_h = generate_pink_mask(inside_image_data)
+            inside_mask, im_w, im_h = generate_pink_mask(inside_image_data, sensitivity=pink_sens)
             if inside_mask:
                 pos_inside = f"top:-{bleed}in;left:-{bleed}in;width:{total_spread_width}in;height:{total_spread_height}in;"
                 pink_inside_html = generate_fluorescent_svg(inside_mask, 'pink-mask-inside', im_w, im_h, pos_inside)
@@ -1634,6 +1638,7 @@ def _process_generate(form_data, files_data):
         'pink_front': form_data.get('pink_front') == 'true',
         'pink_back': form_data.get('pink_back') == 'true',
         'pink_inside': form_data.get('pink_inside') == 'true',
+        'pink_sensitivity': int(form_data.get('pink_sensitivity', 5)),
         'pdf_profile': form_data.get('pdf_profile', 'PDF/X-4'),
         'icc_base64': icc_base64,
         'add_bleed': form_data.get('add_bleed') == 'true',
