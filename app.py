@@ -6,7 +6,6 @@ Flask app for print-ready PDFs (cards, invites, envelopes) via DocRaptor API.
 import json as _json
 import os
 import base64
-import colorsys
 import tempfile
 import threading
 import time
@@ -17,7 +16,7 @@ from io import BytesIO
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
 import docraptor
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageFilter
 from collections import Counter
 
 app = Flask(__name__)
@@ -262,31 +261,55 @@ def get_dominant_color(image_data_base64, border_pct=0.12):
         return "rgb(245, 245, 240)"
 
 
-def generate_pink_mask(image_data_base64, hue_min=300, hue_max=350, sat_min=0.4):
-    """Generate grayscale mask for fluorescent pink: white=pink regions, black=else.
-    Uses Pillow's C-based HSV conversion and channel operations for speed.
-    Returns (base64_png, width, height) or (None, 0, 0) on error."""
+def generate_pink_mask(image_data_base64):
+    """Generate a soft grayscale mask isolating fluorescent/hot-pink regions.
+
+    Tightened HSV thresholds reject warm neutrals (skin, beige, parchment,
+    rust).  Morphological open/close removes noise, and a Gaussian blur
+    feathers the edges so the spot-color transition looks natural in print.
+
+    Returns (base64_png, width, height) or (None, 0, 0) on error.
+    """
+    # --- Tunable thresholds (PIL HSV: H 0-255→0-360°, S/V 0-255) ----------
+    HUE_SCALE = 255.0 / 360.0
+    H_MAIN_LO = int(300 * HUE_SCALE)   # 300° → ~213  (magenta → red)
+    H_WRAP_HI = int(10 * HUE_SCALE)    # 10°  → ~7    (red → warm-pink)
+    S_MIN     = 128                      # ~50 % – excludes skin/beige/parchment
+    V_MIN     = 100                      # ~39 % – excludes dark browns/reds
+    MORPH_ITERATIONS = 2
+    BLUR_RADIUS      = 5                 # PIL radius → kernel ≈ 11×11
+
     try:
         image_bytes = base64.b64decode(image_data_base64)
         img = Image.open(BytesIO(image_bytes)).convert('HSV')
         px_w, px_h = img.size
         h_ch, s_ch, v_ch = img.split()
 
-        scale = 255.0 / 360.0
-        h_lo = int(hue_min * scale)   # 300° → ~213
-        h_wrap = int(20 * scale)      # 20°  → ~14
-        s_lo = int(sat_min * 255)     # 0.4  → ~102
-        v_lo = int(0.15 * 255)        # 0.15 → ~38
+        # Hue selection (two disjoint arcs that wrap around 0°/360°)
+        h_main = h_ch.point(lambda x: 255 if x >= H_MAIN_LO else 0)
+        h_wrap = h_ch.point(lambda x: 255 if x <= H_WRAP_HI else 0)
+        h_ok   = ImageChops.add(h_main, h_wrap)
 
-        h_main = h_ch.point(lambda x: 255 if x >= h_lo else 0)
-        h_low = h_ch.point(lambda x: 255 if x <= h_wrap else 0)
-        s_ok = s_ch.point(lambda x: 255 if x >= s_lo else 0)
-        v_ok = v_ch.point(lambda x: 255 if x >= v_lo else 0)
+        s_ok = s_ch.point(lambda x: 255 if x >= S_MIN else 0)
+        v_ok = v_ch.point(lambda x: 255 if x >= V_MIN else 0)
 
-        h_ok = ImageChops.add(h_main, h_low)        # OR
-        mask = ImageChops.multiply(h_ok, s_ok)       # AND
-        mask = ImageChops.multiply(mask, v_ok)        # AND
+        mask = ImageChops.multiply(ImageChops.multiply(h_ok, s_ok), v_ok)
         mask = mask.point(lambda x: 255 if x > 0 else 0)
+
+        # Morphological open – erode then dilate to remove small noise specks
+        for _ in range(MORPH_ITERATIONS):
+            mask = mask.filter(ImageFilter.MinFilter(3))
+        for _ in range(MORPH_ITERATIONS):
+            mask = mask.filter(ImageFilter.MaxFilter(3))
+
+        # Morphological close – dilate then erode to fill small gaps
+        for _ in range(MORPH_ITERATIONS):
+            mask = mask.filter(ImageFilter.MaxFilter(3))
+        for _ in range(MORPH_ITERATIONS):
+            mask = mask.filter(ImageFilter.MinFilter(3))
+
+        # Gaussian blur for feathered (soft) edges
+        mask = mask.filter(ImageFilter.GaussianBlur(radius=BLUR_RADIUS))
 
         buf = BytesIO()
         mask.save(buf, format='PNG')
