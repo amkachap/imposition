@@ -420,6 +420,21 @@ def _get_mask_dimensions(mask_b64):
     return img.width, img.height
 
 
+def _sanitize_mask(mask_b64):
+    """Convert any mask PNG (possibly RGBA from canvas) to clean grayscale.
+
+    Thresholds at 50% to guarantee binary 0/255 — no dithering artifacts,
+    no alpha complications.  Returns a new base64-encoded mode='L' PNG.
+    """
+    img = Image.open(BytesIO(base64.b64decode(mask_b64))).convert('L')
+    arr = np.array(img)
+    clean = np.where(arr > 127, 255, 0).astype(np.uint8)
+    out = Image.fromarray(clean, mode='L')
+    buf = BytesIO()
+    out.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode('ascii')
+
+
 # PDF profiles available in DocRaptor/Prince
 PDF_PROFILES = [
     'PDF/X-4',
@@ -1496,7 +1511,9 @@ def foil_segment():
         best_idx = int(np.argmax(scores))
         mask = masks[best_idx]
 
-        mask_img = Image.fromarray((mask * 255).astype(np.uint8), mode='L')
+        # Explicit binary threshold — no dithering, no intermediate values
+        mask_arr = np.where(mask, 255, 0).astype(np.uint8)
+        mask_img = Image.fromarray(mask_arr, mode='L')
         buf = BytesIO()
         mask_img.save(buf, format='PNG')
         mask_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
@@ -1687,7 +1704,7 @@ def _process_generate(form_data, files_data):
         for key in ('front_gold', 'front_silver', 'back_gold', 'back_silver'):
             val = form_data.get(f'foil_{key}', '').strip()
             if val:
-                foil_regions[key] = val
+                foil_regions[key] = _sanitize_mask(val)
         settings['foil_regions'] = foil_regions
 
     if card_type == 'envelope':
