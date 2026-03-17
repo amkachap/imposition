@@ -2164,31 +2164,26 @@ SOMEWHERE, ST 67890</textarea>
             const ctx = foilOverlayCanvas.getContext('2d');
             ctx.clearRect(0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
             const regions = foilState[foilActivePanel];
-            let loaded = 0;
             if (regions.length === 0) return;
-            regions.forEach(r => {
+
+            function drawNext(i) {
+                if (i >= regions.length) return;
+                const r = regions[i];
                 const img = new window.Image();
                 img.onload = () => {
-                    ctx.globalAlpha = 0.45;
-                    if (r.foilType === 'gold') {
-                        ctx.globalCompositeOperation = 'source-over';
-                        ctx.drawImage(img, 0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
-                        ctx.globalCompositeOperation = 'source-atop';
-                        ctx.fillStyle = 'rgba(212,175,55,0.7)';
-                        ctx.fillRect(0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
-                        ctx.globalCompositeOperation = 'source-over';
-                    } else {
-                        ctx.globalCompositeOperation = 'source-over';
-                        ctx.drawImage(img, 0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
-                        ctx.globalCompositeOperation = 'source-atop';
-                        ctx.fillStyle = 'rgba(192,192,200,0.7)';
-                        ctx.fillRect(0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
-                        ctx.globalCompositeOperation = 'source-over';
-                    }
+                    ctx.globalAlpha = 0.5;
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.drawImage(img, 0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
+                    ctx.globalCompositeOperation = 'source-atop';
+                    ctx.fillStyle = r.foilType === 'gold' ? 'rgba(212,175,55,0.75)' : 'rgba(192,192,200,0.75)';
+                    ctx.fillRect(0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
+                    ctx.globalCompositeOperation = 'source-over';
                     ctx.globalAlpha = 1.0;
+                    drawNext(i + 1);
                 };
                 img.src = 'data:image/png;base64,' + r.maskB64;
-            });
+            }
+            drawNext(0);
         }
 
         function renderFoilChips() {
@@ -2234,16 +2229,21 @@ SOMEWHERE, ST 67890</textarea>
                     foilState[`composite${cap(panel)}${cap(type)}`] = '';
                     return;
                 }
-                // Composite: OR all masks of this type together on a canvas
                 const canvas = document.createElement('canvas');
                 canvas.width = foilOrigW;
                 canvas.height = foilOrigH;
                 const ctx = canvas.getContext('2d');
                 let loaded = 0;
-                matching.forEach(r => {
+                matching.forEach((r, idx) => {
                     const img = new window.Image();
                     img.onload = () => {
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        if (idx === 0) {
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        } else {
+                            ctx.globalCompositeOperation = 'lighter';
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            ctx.globalCompositeOperation = 'source-over';
+                        }
                         loaded++;
                         if (loaded === matching.length) {
                             const dataUrl = canvas.toDataURL('image/png');
@@ -2267,6 +2267,7 @@ SOMEWHERE, ST 67890</textarea>
 
         // Initialize
         loadIccProfiles();
+        updateFoilButtonVisibility();
     </script>
 </body>
 </html>
