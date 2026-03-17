@@ -277,6 +277,7 @@ def generate_pink_mask(image_data_base64):
     S_MIN     = 128                      # ~50 % – excludes skin/beige/parchment
     V_MIN     = 100                      # ~39 % – excludes dark browns/reds
     MORPH_ITERATIONS = 2
+    ERODE_SIZE       = 5                 # safety-buffer erosion kernel (px)
     BLUR_RADIUS      = 5                 # PIL radius → kernel ≈ 11×11
 
     try:
@@ -307,6 +308,11 @@ def generate_pink_mask(image_data_base64):
             mask = mask.filter(ImageFilter.MaxFilter(3))
         for _ in range(MORPH_ITERATIONS):
             mask = mask.filter(ImageFilter.MinFilter(3))
+
+        # Safety-buffer erosion – pull fluorescent pink boundary inward so
+        # registration drift and ink spread don't bleed onto non-pink
+        # elements (text, paper strips, collage cutouts).
+        mask = mask.filter(ImageFilter.MinFilter(ERODE_SIZE))
 
         # Gaussian blur for feathered (soft) edges
         mask = mask.filter(ImageFilter.GaussianBlur(radius=BLUR_RADIUS))
