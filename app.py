@@ -1469,6 +1469,17 @@ def delete_icc_profile(filename):
 
 # ---------- Foil / SAM segmentation endpoints ----------
 
+@app.route('/api/foil/warmup', methods=['POST'])
+def foil_warmup():
+    """Pre-load the SAM model so set-image is fast. Fire-and-forget from frontend."""
+    try:
+        _get_sam_predictor()
+        return jsonify({'ok': True})
+    except Exception as e:
+        log_error('/api/foil/warmup', e)
+        return jsonify({'error': str(e)}), 503
+
+
 @app.route('/api/foil/set-image', methods=['POST'])
 def foil_set_image():
     """Compute SAM embedding for an uploaded image. Call once per image."""
