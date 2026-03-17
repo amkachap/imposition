@@ -156,3 +156,4 @@ MIT License - Use freely for your projects.
 ## Credits
 
 Built for testing Scodix digital embellishment workflows with DocRaptor/Prince XML PDF generation.
+
