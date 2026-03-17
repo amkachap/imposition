@@ -543,6 +543,64 @@
             display: none;
         }
 
+        .remove-image-btn {
+            display: none;
+            margin-top: 8px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: inherit;
+            color: var(--error);
+            background: transparent;
+            border: 1px solid var(--error);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .remove-image-btn:hover {
+            background: var(--error);
+            color: #fff;
+        }
+
+        .api-key-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .api-key-actions button {
+            padding: 4px 12px;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: inherit;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .btn-save-key {
+            background: var(--success);
+            color: #fff;
+            border: none;
+        }
+
+        .btn-save-key:hover { background: #15803d; }
+
+        .btn-clear-key {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-clear-key:hover { background: var(--bg-secondary); }
+
+        .key-status {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
         .label-hint {
             font-weight: 400;
             color: var(--text-muted);
@@ -617,6 +675,11 @@
                     <div class="form-group">
                         <label for="api_key">DocRaptor API Key</label>
                         <input type="password" id="api_key" name="api_key" placeholder="YOUR_API_KEY_HERE" required>
+                        <div class="api-key-actions">
+                            <button type="button" class="btn-save-key" id="saveApiKey">Save</button>
+                            <button type="button" class="btn-clear-key" id="clearApiKey">Clear saved</button>
+                        </div>
+                        <div class="key-status" id="keyStatus"></div>
                     </div>
 
                     <div class="dimensions-display">
@@ -865,6 +928,7 @@
                             <input type="file" id="insideImageInput" name="inside_image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden>
                             <div class="file-info hidden" id="insideFileInfo"></div>
                             <img id="insideImagePreview" class="image-preview-small" alt="Preview">
+                            <button type="button" class="remove-image-btn" id="removeInsideImage">Remove</button>
                         </div>
                     </div>
 
@@ -879,6 +943,7 @@
                             <input type="file" id="backImageInput" name="back_image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden>
                             <div class="file-info hidden" id="backFileInfo"></div>
                             <img id="backImagePreview" class="image-preview-small" alt="Preview">
+                            <button type="button" class="remove-image-btn" id="removeBackImage">Remove</button>
                         </div>
                     </div>
 
@@ -1041,6 +1106,48 @@ SOMEWHERE, ST 67890</textarea>
         const envelopeTextColor = document.getElementById('envelope_text_color');
         const fontPreviewText = document.getElementById('fontPreviewText');
 
+        // --- API key persistence (localStorage) ---
+        const apiKeyInput = document.getElementById('api_key');
+        const keyStatus = document.getElementById('keyStatus');
+        const savedKey = localStorage.getItem('docraptor_api_key');
+        if (savedKey) {
+            apiKeyInput.value = savedKey;
+            keyStatus.textContent = 'Loaded from saved settings';
+        }
+        document.getElementById('saveApiKey').addEventListener('click', () => {
+            const val = apiKeyInput.value.trim();
+            if (!val) return;
+            localStorage.setItem('docraptor_api_key', val);
+            keyStatus.textContent = 'Saved';
+            setTimeout(() => { keyStatus.textContent = ''; }, 2000);
+        });
+        document.getElementById('clearApiKey').addEventListener('click', () => {
+            localStorage.removeItem('docraptor_api_key');
+            apiKeyInput.value = '';
+            keyStatus.textContent = 'Cleared';
+            setTimeout(() => { keyStatus.textContent = ''; }, 2000);
+        });
+
+        // --- Remove-image helpers ---
+        function clearImageUpload(inputEl, uploadAreaEl, fileInfoEl, previewEl, removeBtn) {
+            inputEl.value = '';
+            uploadAreaEl.classList.remove('has-file');
+            fileInfoEl.classList.add('hidden');
+            fileInfoEl.textContent = '';
+            previewEl.style.display = 'none';
+            previewEl.src = '';
+            removeBtn.style.display = 'none';
+        }
+
+        document.getElementById('removeInsideImage').addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearImageUpload(insideImageInput, insideUploadArea, insideFileInfo, insideImagePreview, e.currentTarget);
+        });
+        document.getElementById('removeBackImage').addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearImageUpload(backImageInput, backUploadArea, backFileInfo, backImagePreview, e.currentTarget);
+        });
+
         // File upload handling
         uploadArea.addEventListener('click', () => imageInput.click());
         
@@ -1134,13 +1241,16 @@ SOMEWHERE, ST 67890</textarea>
             uploadAreaEl.classList.add('has-file');
             fileInfoEl.classList.remove('hidden');
             fileInfoEl.textContent = `${file.name} (${formatFileSize(file.size)})`;
-            
+
             const reader = new FileReader();
             reader.onload = (e) => {
                 previewEl.src = e.target.result;
                 previewEl.style.display = 'block';
             };
             reader.readAsDataURL(file);
+
+            const removeBtn = uploadAreaEl.querySelector('.remove-image-btn');
+            if (removeBtn) removeBtn.style.display = 'inline-block';
         }
 
         // Provide all images checkbox handling

@@ -6,8 +6,8 @@ Flask app for print-ready PDFs (cards, invites, envelopes) via DocRaptor API.
 import json as _json
 import os
 import base64
+import multiprocessing
 import tempfile
-import threading
 import time
 import traceback
 import uuid
@@ -1299,7 +1299,12 @@ def delete_icc_profile(filename):
 
 @app.route('/generate', methods=['POST'])
 def generate_pdf():
-    """Accept upload, spawn background job, return job_id immediately."""
+    """Accept upload, spawn background process, return job_id immediately.
+
+    Uses multiprocessing.Process instead of threading.Thread so that
+    CPU-intensive image work (PIL mask generation) runs in a separate
+    process with its own GIL, keeping Gunicorn workers responsive.
+    """
     try:
         form_data = dict(request.form)
         files_data = {}
@@ -1311,12 +1316,12 @@ def generate_pdf():
         job_id = str(uuid.uuid4())
         set_job(job_id, {'status': 'processing', 'created': time.time()})
 
-        thread = threading.Thread(
+        proc = multiprocessing.Process(
             target=_run_generate_job,
             args=(job_id, form_data, files_data),
             daemon=True,
         )
-        thread.start()
+        proc.start()
 
         cleanup_old_jobs()
         return jsonify({'job_id': job_id})
@@ -1354,14 +1359,19 @@ def job_download(job_id):
 
 
 def _run_generate_job(job_id, form_data, files_data):
-    """Background thread: run PDF generation and store result."""
+    """Background process: run PDF generation and store result.
+
+    Runs in a child process (separate GIL) so CPU-heavy PIL work
+    doesn't block Gunicorn workers from handling new requests.
+    """
     try:
         result = _process_generate(form_data, files_data)
         job = get_job(job_id) or {}
         job.update(result)
         set_job(job_id, job)
     except Exception as e:
-        log_error('/generate', e)
+        tb = traceback.format_exc()
+        print(f"[generate-job {job_id}] ERROR: {e}\n{tb}")
         set_job(job_id, {'status': 'error', 'error': str(e)})
 
 
