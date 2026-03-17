@@ -22,6 +22,9 @@ import numpy as np
 
 # SAM (Segment Anything Model) — lazy-loaded on first use
 _sam_predictor = None
+# Cache stores raw image bytes so any worker can re-embed on demand.
+# Structure: { image_id: { 'bytes': bytes, 'width': int, 'height': int,
+#                          'embedded_in_pid': int } }
 _sam_image_cache = {}
 
 SAM_CHECKPOINT = os.environ.get(
@@ -1439,13 +1442,15 @@ def foil_set_image():
         return jsonify({'error': 'imageId and imageBase64 are required'}), 400
 
     try:
-        img = Image.open(BytesIO(base64.b64decode(image_b64))).convert('RGB')
+        img_bytes = base64.b64decode(image_b64)
+        img = Image.open(BytesIO(img_bytes)).convert('RGB')
         img_array = np.array(img)
         predictor.set_image(img_array)
         _sam_image_cache[image_id] = {
+            'bytes': img_bytes,       # stored so other workers can re-embed
             'width': img.width,
             'height': img.height,
-            'embedding_set': True,
+            'embedded_in_pid': os.getpid(),
         }
         return jsonify({
             'ok': True,
@@ -1471,6 +1476,15 @@ def foil_segment():
 
     try:
         predictor = _get_sam_predictor()
+
+        # With multiple Gunicorn workers each worker has its own process memory.
+        # Re-embed the image if this worker hasn't done it yet.
+        info = _sam_image_cache[image_id]
+        if info.get('embedded_in_pid') != os.getpid():
+            img = Image.open(BytesIO(info['bytes'])).convert('RGB')
+            predictor.set_image(np.array(img))
+            info['embedded_in_pid'] = os.getpid()
+
         input_point = np.array([[int(x), int(y)]])
         input_label = np.array([1])
 
@@ -1487,7 +1501,6 @@ def foil_segment():
         mask_img.save(buf, format='PNG')
         mask_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
 
-        info = _sam_image_cache[image_id]
         return jsonify({
             'mask': mask_b64,
             'width': info['width'],

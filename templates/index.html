@@ -696,18 +696,21 @@
         .foil-region-chip button:hover { opacity: 1; }
         .foil-spinner {
             position: absolute;
-            inset: 0;
+            top: 8px;
+            right: 8px;
+            width: 32px;
+            height: 32px;
+            background: rgba(0,0,0,0.55);
+            border-radius: 50%;
+            z-index: 5;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(0,0,0,0.4);
-            border-radius: var(--radius);
-            z-index: 5;
         }
         .foil-spinner::after {
             content: '';
-            width: 36px; height: 36px;
-            border: 3px solid rgba(255,255,255,0.3);
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
             border-top-color: #fff;
             border-radius: 50%;
             animation: spin 0.7s linear infinite;
@@ -1201,6 +1204,7 @@ SOMEWHERE, ST 67890</textarea>
                 <canvas id="foilOverlayCanvas"></canvas>
                 <div class="foil-spinner" id="foilSpinner" style="display:none;"></div>
             </div>
+            <p id="foilStatusText" style="font-size:12px;color:var(--text-muted);margin-top:6px;min-height:16px;"></p>
             <div class="foil-toolbar">
                 <label>Foil type for next click:</label>
                 <select id="foilTypeSelect">
@@ -2093,6 +2097,8 @@ SOMEWHERE, ST 67890</textarea>
                 const b64 = e.target.result.split(',')[1];
                 foilImageId = `foil-${panel}-${Date.now()}`;
                 foilSpinner.style.display = 'flex';
+                const foilStatus = document.getElementById('foilStatusText');
+                foilStatus.textContent = 'Analyzing image… (first load may take 30–60s)';
                 try {
                     const resp = await fetch('/api/foil/set-image', {
                         method: 'POST',
@@ -2104,10 +2110,13 @@ SOMEWHERE, ST 67890</textarea>
                         foilOrigW = d.width;
                         foilOrigH = d.height;
                         foilEmbeddingReady = true;
+                        foilStatus.textContent = 'Ready — click regions to select foil areas.';
                     } else {
+                        foilStatus.textContent = '';
                         alert('SAM error: ' + (d.error || 'unknown'));
                     }
                 } catch (err) {
+                    foilStatus.textContent = '';
                     alert('Failed to set image: ' + err.message);
                 }
                 foilSpinner.style.display = 'none';
@@ -2134,6 +2143,7 @@ SOMEWHERE, ST 67890</textarea>
             });
 
             foilSpinner.style.display = 'flex';
+            document.getElementById('foilStatusText').textContent = 'Segmenting…';
             try {
                 const resp = await fetch('/api/foil/segment', {
                     method: 'POST',
@@ -2162,8 +2172,10 @@ SOMEWHERE, ST 67890</textarea>
                 }
                 redrawFoilOverlay();
                 renderFoilChips();
+                document.getElementById('foilStatusText').textContent = 'Click more regions or click Apply.';
             } catch (err) {
                 alert('Segment error: ' + err.message);
+                document.getElementById('foilStatusText').textContent = '';
             }
             foilSpinner.style.display = 'none';
         });
