@@ -264,13 +264,14 @@ def get_dominant_color(image_data_base64, border_pct=0.12):
 
 def generate_pink_mask(image_data_base64, hue_min=300, hue_max=350, sat_min=0.4):
     """Generate grayscale mask for fluorescent pink: white=pink regions, black=else.
-    Uses Pillow's C-based HSV conversion and channel operations for speed."""
+    Uses Pillow's C-based HSV conversion and channel operations for speed.
+    Returns (base64_png, width, height) or (None, 0, 0) on error."""
     try:
         image_bytes = base64.b64decode(image_data_base64)
         img = Image.open(BytesIO(image_bytes)).convert('HSV')
+        px_w, px_h = img.size
         h_ch, s_ch, v_ch = img.split()
 
-        # PIL HSV hue: 0-255 maps to 0-360 degrees
         scale = 255.0 / 360.0
         h_lo = int(hue_min * scale)   # 300° → ~213
         h_wrap = int(20 * scale)      # 20°  → ~14
@@ -289,10 +290,31 @@ def generate_pink_mask(image_data_base64, hue_min=300, hue_max=350, sat_min=0.4)
 
         buf = BytesIO()
         mask.save(buf, format='PNG')
-        return base64.b64encode(buf.getvalue()).decode('utf-8')
+        return base64.b64encode(buf.getvalue()).decode('utf-8'), px_w, px_h
     except Exception as e:
         print(f"Error generating pink mask: {e}")
-        return None
+        return None, 0, 0
+
+
+def generate_fluorescent_svg(mask_base64, mask_id, vb_w, vb_h, css_pos):
+    """Build an inline SVG that applies prince-color(FluorescentPink) through
+    an SVG <mask> containing the grayscale PNG.  Prince 15.1 converts this
+    into a PDF /Luminosity soft mask with a /Separation colorspace.
+    css_pos: inline CSS for absolute positioning (top, left, width, height)."""
+    return (
+        f'<svg viewBox="0 0 {vb_w} {vb_h}"'
+        f' xmlns="http://www.w3.org/2000/svg"'
+        f' xmlns:xlink="http://www.w3.org/1999/xlink"'
+        f' style="position:absolute;z-index:1;pointer-events:none;{css_pos}">'
+        f'<defs><mask id="{mask_id}">'
+        f'<image href="data:image/png;base64,{mask_base64}"'
+        f' width="{vb_w}" height="{vb_h}" preserveAspectRatio="none"/>'
+        f'</mask></defs>'
+        f'<rect width="{vb_w}" height="{vb_h}"'
+        f' style="fill:prince-color(FluorescentPink,overprint);"'
+        f' mask="url(#{mask_id})"/>'
+        f'</svg>'
+    )
 
 
 # PDF profiles available in DocRaptor/Prince
@@ -401,23 +423,6 @@ def get_silver_layer_css(bleed, total_width, total_height):
     """
 
 
-def get_fluorescent_layer_css(bleed, total_width, total_height):
-    """Generate base CSS for fluorescent pink layer. Mask applied inline per panel."""
-    return f"""
-        .fluorescent-layer {{
-            position: absolute;
-            top: -{bleed}in;
-            left: -{bleed}in;
-            width: {total_width}in;
-            height: {total_height}in;
-            background-color: prince-color(FluorescentPink, overprint);
-            mask-size: 100% 100%;
-            mask-mode: luminance;
-            -webkit-mask-size: 100% 100%;
-            -webkit-mask-mode: luminance;
-            z-index: 1;
-        }}
-    """
 
 
 def get_prince_pdf_css(settings):
@@ -643,21 +648,20 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     silver_front_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_front') else ''
     silver_back_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_back') else ''
 
-    # Fluorescent pink spot color support
+    # Fluorescent pink spot color support (SVG mask approach)
     is_pink = settings.get('print_mode') == 'fluorescent_pink'
     pink_front_html = ''
     pink_back_html = ''
-    pink_css = ''
     if is_pink:
-        pink_css = get_fluorescent_layer_css(bleed, total_width, total_height)
+        pos_full = f"top:-{bleed}in;left:-{bleed}in;width:{total_width}in;height:{total_height}in;"
         if settings.get('pink_front') and image_data:
-            front_mask = generate_pink_mask(image_data)
+            front_mask, fm_w, fm_h = generate_pink_mask(image_data)
             if front_mask:
-                pink_front_html = f'<div class="fluorescent-layer" style="mask-image: url(\'data:image/png;base64,{front_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{front_mask}\');"></div>'
+                pink_front_html = generate_fluorescent_svg(front_mask, 'pink-mask-front', fm_w, fm_h, pos_full)
         if settings.get('pink_back') and back_image_data:
-            back_mask = generate_pink_mask(back_image_data)
+            back_mask, bm_w, bm_h = generate_pink_mask(back_image_data)
             if back_mask:
-                pink_back_html = f'<div class="fluorescent-layer" style="mask-image: url(\'data:image/png;base64,{back_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{back_mask}\');"></div>'
+                pink_back_html = generate_fluorescent_svg(back_mask, 'pink-mask-back', bm_w, bm_h, pos_full)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -725,7 +729,6 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         }}
         
         {silver_css}
-        {pink_css}
         {branding_css}
     </style>
 </head>
@@ -811,41 +814,28 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     silver_outside_html = '<div class="silver-base"></div>' if is_silver and silver_outside else ''
     silver_inside_html = '<div class="silver-base"></div>' if is_silver and settings.get('silver_inside') else ''
 
-    # Fluorescent pink spot color support
+    # Fluorescent pink spot color support (SVG mask approach)
     is_pink = settings.get('print_mode') == 'fluorescent_pink'
     half_w = total_spread_width / 2
-    pink_css = ''
     pink_outside_left_html = ''
     pink_outside_right_html = ''
     pink_inside_html = ''
     if is_pink:
-        pink_css = get_fluorescent_layer_css(bleed, total_spread_width, total_spread_height)
-        pink_css += f"""
-        .fluorescent-layer-panel {{
-            position: absolute;
-            top: -{bleed}in;
-            width: {half_w}in;
-            height: {total_spread_height}in;
-            background-color: prince-color(FluorescentPink, overprint);
-            mask-size: 100% 100%;
-            mask-mode: luminance;
-            -webkit-mask-size: 100% 100%;
-            -webkit-mask-mode: luminance;
-            z-index: 1;
-        }}
-        """
         if settings.get('pink_back') and back_image_data:
-            back_mask = generate_pink_mask(back_image_data)
+            back_mask, bm_w, bm_h = generate_pink_mask(back_image_data)
             if back_mask:
-                pink_outside_left_html = f'<div class="fluorescent-layer-panel" style="left: -{bleed}in; mask-image: url(\'data:image/png;base64,{back_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{back_mask}\');"></div>'
+                pos_left = f"top:-{bleed}in;left:-{bleed}in;width:{half_w}in;height:{total_spread_height}in;"
+                pink_outside_left_html = generate_fluorescent_svg(back_mask, 'pink-mask-outside-left', bm_w, bm_h, pos_left)
         if settings.get('pink_front') and image_data:
-            front_mask = generate_pink_mask(image_data)
+            front_mask, fm_w, fm_h = generate_pink_mask(image_data)
             if front_mask:
-                pink_outside_right_html = f'<div class="fluorescent-layer-panel" style="left: {half_w - bleed}in; mask-image: url(\'data:image/png;base64,{front_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{front_mask}\');"></div>'
+                pos_right = f"top:-{bleed}in;left:{half_w - bleed}in;width:{half_w}in;height:{total_spread_height}in;"
+                pink_outside_right_html = generate_fluorescent_svg(front_mask, 'pink-mask-outside-right', fm_w, fm_h, pos_right)
         if settings.get('pink_inside') and inside_image_data:
-            inside_mask = generate_pink_mask(inside_image_data)
+            inside_mask, im_w, im_h = generate_pink_mask(inside_image_data)
             if inside_mask:
-                pink_inside_html = f'<div class="fluorescent-layer" style="mask-image: url(\'data:image/png;base64,{inside_mask}\'); -webkit-mask-image: url(\'data:image/png;base64,{inside_mask}\');"></div>'
+                pos_inside = f"top:-{bleed}in;left:-{bleed}in;width:{total_spread_width}in;height:{total_spread_height}in;"
+                pink_inside_html = generate_fluorescent_svg(inside_mask, 'pink-mask-inside', im_w, im_h, pos_inside)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -932,7 +922,6 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
         }}
 
         {silver_css}
-        {pink_css}
     </style>
 </head>
 <body>
