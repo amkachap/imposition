@@ -43,8 +43,14 @@ def _get_sam_predictor():
         if checkpoint_dir:
             os.makedirs(checkpoint_dir, exist_ok=True)
         print(f'SAM checkpoint not found — downloading to {SAM_CHECKPOINT} ...')
-        urllib.request.urlretrieve(SAM_CHECKPOINT_URL, SAM_CHECKPOINT)
-        print('SAM checkpoint download complete.')
+        try:
+            urllib.request.urlretrieve(SAM_CHECKPOINT_URL, SAM_CHECKPOINT)
+            print('SAM checkpoint download complete.')
+        except Exception as dl_err:
+            # Remove partial file so next call retries cleanly
+            if os.path.exists(SAM_CHECKPOINT):
+                os.remove(SAM_CHECKPOINT)
+            raise RuntimeError(f'Failed to download SAM checkpoint: {dl_err}') from dl_err
 
     import torch
     from segment_anything import sam_model_registry, SamPredictor
@@ -1421,7 +1427,8 @@ def foil_set_image():
     """Compute SAM embedding for an uploaded image. Call once per image."""
     try:
         predictor = _get_sam_predictor()
-    except RuntimeError as e:
+    except Exception as e:
+        log_error('/api/foil/set-image (model load)', e)
         return jsonify({'error': str(e)}), 503
 
     data = request.get_json(silent=True) or {}
