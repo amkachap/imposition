@@ -29,6 +29,7 @@ SAM_CHECKPOINT = os.environ.get(
     os.path.join(os.path.dirname(__file__), 'sam_vit_b_01ec64.pth'),
 )
 SAM_MODEL_TYPE = os.environ.get('SAM_MODEL_TYPE', 'vit_b')
+SAM_CHECKPOINT_URL = 'https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth'
 
 
 def _get_sam_predictor():
