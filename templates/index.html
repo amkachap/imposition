@@ -1205,6 +1205,11 @@ SOMEWHERE, ST 67890</textarea>
                 <div class="foil-spinner" id="foilSpinner" style="display:none;"></div>
             </div>
             <p id="foilStatusText" style="font-size:12px;color:var(--text-muted);margin-top:6px;min-height:16px;"></p>
+            <div id="foilConfirmBar" style="display:none; gap:10px; justify-content:center; align-items:center; margin:10px 0; padding:10px; background:var(--bg-primary); border-radius:var(--radius); border:1px solid var(--border);">
+                <span style="font-size:13px;font-weight:500;">Apply foil to this region?</span>
+                <button id="foilConfirmYes" type="button" style="background:#22c55e;color:#fff;padding:7px 20px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;">Confirm</button>
+                <button id="foilConfirmNo" type="button" style="background:#ef4444;color:#fff;padding:7px 20px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;">Reject</button>
+            </div>
             <div class="foil-toolbar">
                 <label>Foil type for next click:</label>
                 <select id="foilTypeSelect">
@@ -2054,6 +2059,7 @@ SOMEWHERE, ST 67890</textarea>
         let foilImageId = '';
         let foilOrigW = 0, foilOrigH = 0;
         let foilEmbeddingReady = false;
+        let foilPendingRegion = null;
 
         const foilModal = document.getElementById('foilModal');
         const foilImg = document.getElementById('foilImg');
@@ -2121,6 +2127,8 @@ SOMEWHERE, ST 67890</textarea>
                 `Select Foil Regions — ${panel === 'front' ? 'Front' : 'Back'}`;
             foilModal.style.display = 'block';
             foilEmbeddingReady = false;
+            foilPendingRegion = null;
+            document.getElementById('foilConfirmBar').style.display = 'none';
 
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -2133,12 +2141,11 @@ SOMEWHERE, ST 67890</textarea>
                     foilOrigW = resized.w;
                     foilOrigH = resized.h;
 
-                    // Display the resized image so click coords match SAM dimensions
                     foilImg.src = resized.dataUrl;
                     foilImg.onload = () => {
                         foilOverlayCanvas.width = resized.w;
                         foilOverlayCanvas.height = resized.h;
-                        redrawFoilOverlay();
+                        redrawConfirmedOutlines();
                     };
 
                     const resp = await fetch('/api/foil/set-image', {
@@ -2168,18 +2175,12 @@ SOMEWHERE, ST 67890</textarea>
         foilBackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFoilModal('back'); });
 
         document.getElementById('foilCanvasWrap').addEventListener('click', async (e) => {
-            if (!foilEmbeddingReady) return;
+            if (!foilEmbeddingReady || foilPendingRegion) return;
             const rect = foilImg.getBoundingClientRect();
             const scaleX = foilOrigW / rect.width;
             const scaleY = foilOrigH / rect.height;
             const x = Math.round((e.clientX - rect.left) * scaleX);
             const y = Math.round((e.clientY - rect.top) * scaleY);
-
-            const regions = foilState[foilActivePanel];
-            const existing = regions.find(r => {
-                const img = new window.Image();
-                return false; // deselection checked after segment returns
-            });
 
             foilSpinner.style.display = 'flex';
             document.getElementById('foilStatusText').textContent = 'Segmenting…';
@@ -2192,26 +2193,15 @@ SOMEWHERE, ST 67890</textarea>
                 const d = await resp.json();
                 if (d.error) { alert(d.error); foilSpinner.style.display = 'none'; return; }
 
-                // Check for deselection: if click point is inside an existing mask
-                let removed = false;
-                for (let i = regions.length - 1; i >= 0; i--) {
-                    if (isPointInMask(regions[i].maskB64, x, y, foilOrigW, foilOrigH)) {
-                        regions.splice(i, 1);
-                        removed = true;
-                        break;
-                    }
-                }
-                if (!removed) {
-                    regions.push({
-                        id: crypto.randomUUID(),
-                        maskB64: d.mask,
-                        foilType: foilTypeSelect.value,
-                        x, y,
-                    });
-                }
-                redrawFoilOverlay();
-                renderFoilChips();
-                document.getElementById('foilStatusText').textContent = 'Click more regions or click Apply.';
+                foilPendingRegion = {
+                    id: crypto.randomUUID(),
+                    maskB64: d.mask,
+                    foilType: foilTypeSelect.value,
+                    x, y,
+                };
+                drawPendingOutline(foilPendingRegion);
+                document.getElementById('foilConfirmBar').style.display = 'flex';
+                document.getElementById('foilStatusText').textContent = 'Region detected — confirm or reject.';
             } catch (err) {
                 alert('Segment error: ' + err.message);
                 document.getElementById('foilStatusText').textContent = '';
@@ -2219,13 +2209,77 @@ SOMEWHERE, ST 67890</textarea>
             foilSpinner.style.display = 'none';
         });
 
-        function isPointInMask(maskB64, px, py, origW, origH) {
-            // Quick check: decode mask, sample pixel at (px, py)
-            // We use a temporary canvas for this
-            return false; // simplified — always adds new region
+        function drawOutlineFromMask(ctx, maskImg, cw, ch, color, lineWidth) {
+            const tmp = document.createElement('canvas');
+            tmp.width = cw; tmp.height = ch;
+            const tctx = tmp.getContext('2d');
+            tctx.drawImage(maskImg, 0, 0, cw, ch);
+            const imageData = tctx.getImageData(0, 0, cw, ch);
+            const d = imageData.data;
+
+            const edge = ctx.createImageData(cw, ch);
+            const ed = edge.data;
+            const step = Math.max(1, Math.floor(lineWidth / 2));
+
+            for (let y = step; y < ch - step; y++) {
+                for (let x = step; x < cw - step; x++) {
+                    const idx = (y * cw + x) * 4;
+                    if (d[idx] > 127) {
+                        let isEdge = false;
+                        for (let s = 1; s <= step && !isEdge; s++) {
+                            const neighbors = [
+                                ((y-s)*cw + x)*4, ((y+s)*cw + x)*4,
+                                (y*cw + (x-s))*4, (y*cw + (x+s))*4
+                            ];
+                            isEdge = neighbors.some(n => n >= 0 && n < d.length && d[n] < 127);
+                        }
+                        if (isEdge) {
+                            ed[idx]   = color[0];
+                            ed[idx+1] = color[1];
+                            ed[idx+2] = color[2];
+                            ed[idx+3] = 255;
+                        }
+                    }
+                }
+            }
+
+            const edgeCanvas = document.createElement('canvas');
+            edgeCanvas.width = cw; edgeCanvas.height = ch;
+            const ectx = edgeCanvas.getContext('2d');
+            ectx.putImageData(edge, 0, 0);
+            return edgeCanvas;
         }
 
-        function redrawFoilOverlay() {
+        function drawPendingOutline(region) {
+            const ctx = foilOverlayCanvas.getContext('2d');
+            const cw = foilOverlayCanvas.width, ch = foilOverlayCanvas.height;
+            redrawConfirmedOutlines();
+
+            const img = new window.Image();
+            img.onload = () => {
+                const color = region.foilType === 'gold' ? [212,175,55] : [192,192,200];
+                const edgeCanvas = drawOutlineFromMask(ctx, img, cw, ch, color, 4);
+
+                ctx.globalAlpha = 1.0;
+                ctx.drawImage(edgeCanvas, 0, 0);
+
+                // Light fill inside the region for preview
+                const tmp = document.createElement('canvas');
+                tmp.width = cw; tmp.height = ch;
+                const tctx = tmp.getContext('2d');
+                tctx.drawImage(img, 0, 0, cw, ch);
+                tctx.globalCompositeOperation = 'source-atop';
+                tctx.fillStyle = region.foilType === 'gold'
+                    ? 'rgba(212,175,55,1)' : 'rgba(192,192,200,1)';
+                tctx.fillRect(0, 0, cw, ch);
+                ctx.globalAlpha = 0.3;
+                ctx.drawImage(tmp, 0, 0);
+                ctx.globalAlpha = 1.0;
+            };
+            img.src = 'data:image/png;base64,' + region.maskB64;
+        }
+
+        function redrawConfirmedOutlines() {
             const ctx = foilOverlayCanvas.getContext('2d');
             const cw = foilOverlayCanvas.width, ch = foilOverlayCanvas.height;
             ctx.clearRect(0, 0, cw, ch);
@@ -2237,17 +2291,10 @@ SOMEWHERE, ST 67890</textarea>
                 const r = regions[i];
                 const img = new window.Image();
                 img.onload = () => {
-                    const tmp = document.createElement('canvas');
-                    tmp.width = cw; tmp.height = ch;
-                    const tctx = tmp.getContext('2d');
-                    tctx.drawImage(img, 0, 0, cw, ch);
-                    tctx.globalCompositeOperation = 'source-atop';
-                    tctx.fillStyle = r.foilType === 'gold'
-                        ? 'rgba(212,175,55,1)' : 'rgba(192,192,200,1)';
-                    tctx.fillRect(0, 0, cw, ch);
-                    ctx.globalAlpha = 0.5;
-                    ctx.drawImage(tmp, 0, 0);
+                    const color = r.foilType === 'gold' ? [212,175,55] : [192,192,200];
+                    const edgeCanvas = drawOutlineFromMask(ctx, img, cw, ch, color, 3);
                     ctx.globalAlpha = 1.0;
+                    ctx.drawImage(edgeCanvas, 0, 0);
                     drawNext(i + 1);
                 };
                 img.src = 'data:image/png;base64,' + r.maskB64;
@@ -2267,19 +2314,40 @@ SOMEWHERE, ST 67890</textarea>
                 btn.addEventListener('click', (e) => {
                     const idx = parseInt(e.currentTarget.dataset.idx);
                     regions.splice(idx, 1);
-                    redrawFoilOverlay();
+                    redrawConfirmedOutlines();
                     renderFoilChips();
                 });
             });
         }
 
+        document.getElementById('foilConfirmYes').addEventListener('click', () => {
+            if (!foilPendingRegion) return;
+            foilState[foilActivePanel].push(foilPendingRegion);
+            foilPendingRegion = null;
+            document.getElementById('foilConfirmBar').style.display = 'none';
+            redrawConfirmedOutlines();
+            renderFoilChips();
+            document.getElementById('foilStatusText').textContent = 'Region added. Click more regions or click Apply.';
+        });
+
+        document.getElementById('foilConfirmNo').addEventListener('click', () => {
+            foilPendingRegion = null;
+            document.getElementById('foilConfirmBar').style.display = 'none';
+            redrawConfirmedOutlines();
+            document.getElementById('foilStatusText').textContent = 'Region rejected. Click another region.';
+        });
+
         document.getElementById('foilClearBtn').addEventListener('click', () => {
             foilState[foilActivePanel] = [];
-            redrawFoilOverlay();
+            foilPendingRegion = null;
+            document.getElementById('foilConfirmBar').style.display = 'none';
+            redrawConfirmedOutlines();
             renderFoilChips();
         });
 
         document.getElementById('foilCancelBtn').addEventListener('click', () => {
+            foilPendingRegion = null;
+            document.getElementById('foilConfirmBar').style.display = 'none';
             foilModal.style.display = 'none';
         });
 
@@ -2334,6 +2402,8 @@ SOMEWHERE, ST 67890</textarea>
         // Close foil modal on Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && foilModal.style.display === 'block') {
+                foilPendingRegion = null;
+                document.getElementById('foilConfirmBar').style.display = 'none';
                 foilModal.style.display = 'none';
             }
         });
