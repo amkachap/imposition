@@ -38,10 +38,13 @@ def _get_sam_predictor():
         return _sam_predictor
 
     if not os.path.isfile(SAM_CHECKPOINT):
-        raise RuntimeError(
-            f'SAM checkpoint not found at {SAM_CHECKPOINT}. '
-            'Download from https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth'
-        )
+        import urllib.request
+        checkpoint_dir = os.path.dirname(SAM_CHECKPOINT)
+        if checkpoint_dir:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+        print(f'SAM checkpoint not found — downloading to {SAM_CHECKPOINT} ...')
+        urllib.request.urlretrieve(SAM_CHECKPOINT_URL, SAM_CHECKPOINT)
+        print('SAM checkpoint download complete.')
 
     import torch
     from segment_anything import sam_model_registry, SamPredictor

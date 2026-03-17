@@ -848,6 +848,14 @@
                             <input type="checkbox" id="pink_inside" name="pink_inside">
                             <label for="pink_inside">Inside</label>
                         </div>
+                        <div class="form-group" style="margin-top:12px;">
+                            <label for="pink_sensitivity" style="display:flex;justify-content:space-between;">
+                                <span>Pink Sensitivity</span>
+                                <span id="pinkSensitivityValue">5 / 10</span>
+                            </label>
+                            <input type="range" id="pink_sensitivity" name="pink_sensitivity" min="1" max="10" value="5" style="width:100%;margin-top:4px;">
+                            <p class="checkbox-description">Lower = vivid/fluorescent only. Higher = catches softer pinks (may include warm skin tones).</p>
+                        </div>
                     </div>
 
                     <hr>
@@ -1509,6 +1517,10 @@ SOMEWHERE, ST 67890</textarea>
 
         printMode.addEventListener('change', () => {
             updateImageUploadVisibility();
+        });
+
+        document.getElementById('pink_sensitivity').addEventListener('input', (e) => {
+            document.getElementById('pinkSensitivityValue').textContent = e.target.value + ' / 10';
         });
 
         // ICC Profile upload handling
