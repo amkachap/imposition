@@ -424,7 +424,7 @@ def get_spot_color_css(settings):
     print_mode = settings.get('print_mode', 'cmyk')
     if print_mode == 'cmyk_silver':
         return """
-        @prince-color SpotSilver {
+        @prince-color Silver {
             alternate-color: cmyk(0, 0, 0, 0.3);
         }
         """
@@ -446,7 +446,7 @@ def get_silver_layer_css(bleed, total_width, total_height):
             left: -{bleed}in;
             width: {total_width}in;
             height: {total_height}in;
-            background-color: prince-color(SpotSilver, overprint);
+            background-color: prince-color(Silver, overprint);
             z-index: 0;
         }}
     """
@@ -579,7 +579,10 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     prince_pdf_block = get_prince_pdf_css(settings)
     fit_mode = settings.get('image_fit', 'cover')
     bg_color = settings.get('background_color', '#ffffff')
-    
+
+    is_silver = settings.get('print_mode') == 'cmyk_silver'
+    front_bg = 'transparent' if is_silver and settings.get('silver_front') else bg_color
+
     marks = 'crop' if settings.get('include_crop_marks', False) and bleed > 0 else 'none'
     
     # Determine back panel content
@@ -588,7 +591,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         back_bg_color = 'transparent'
     else:
         back_bg_content = ''
-        back_bg_color = bg_color
+        back_bg_color = 'transparent' if is_silver and settings.get('silver_back') else bg_color
     
     # Branding overlay for flat card back panel
     include_branding = settings.get('include_branding', True)
@@ -734,7 +737,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             left: -{bleed}in;
             width: {total_width}in;
             height: {total_height}in;
-            background-color: {bg_color};
+            background-color: {front_bg};
             z-index: 1;
         }}
         
@@ -806,7 +809,12 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     prince_pdf_block = get_prince_pdf_css(settings)
     fit_mode = settings.get('image_fit', 'cover')
     bg_color = settings.get('background_color', '#ffffff')
-    
+    is_silver = settings.get('print_mode') == 'cmyk_silver'
+    silver_any_outside = is_silver and (settings.get('silver_front') or settings.get('silver_back'))
+    silver_any_inside = is_silver and settings.get('silver_inside')
+    outside_bg = 'transparent' if silver_any_outside else bg_color
+    inside_bg = 'transparent' if silver_any_inside else bg_color
+
     marks = 'crop' if settings.get('include_crop_marks', False) and bleed > 0 else 'none'
     
     # Determine back panel content (Panel 4)
@@ -960,16 +968,16 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
         {silver_outside_html}
         {pink_outside_left_html}
         {pink_outside_right_html}
-        <div class="spread-content">
+        <div class="spread-content" style="background-color:{outside_bg};">
             <!-- Panel 4: Back Cover (left side of spread) -->
             <div class="panel">
-                <div class="panel-inner">
+                <div class="panel-inner" style="background-color:{outside_bg};">
                     {back_panel_content}
                 </div>
             </div>
             <!-- Panel 1: Front Cover (right side of spread) - uploaded image -->
             <div class="panel">
-                <div class="panel-inner">
+                <div class="panel-inner" style="background-color:{outside_bg};">
                     <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Front Cover">
                 </div>
             </div>
@@ -981,7 +989,7 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
     <div class="spread">
         {silver_inside_html}
         {pink_inside_html}
-        <div class="spread-content">
+        <div class="spread-content" style="background-color:{inside_bg};">
             {inside_spread_inner}
         </div>
         {inside_fold_indicator}
