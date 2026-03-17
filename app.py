@@ -22,10 +22,38 @@ import numpy as np
 
 # SAM (Segment Anything Model) — lazy-loaded on first use
 _sam_predictor = None
-# Cache stores raw image bytes so any worker can re-embed on demand.
-# Structure: { image_id: { 'bytes': bytes, 'width': int, 'height': int,
-#                          'embedded_in_pid': int } }
-_sam_image_cache = {}
+_sam_current_image_id = None   # track which image is currently embedded in this worker
+
+# File-based image cache so all Gunicorn workers can access the same data.
+_SAM_CACHE_DIR = os.path.join(tempfile.gettempdir(), 'sam_image_cache')
+os.makedirs(_SAM_CACHE_DIR, exist_ok=True)
+
+
+def _sam_cache_path(image_id):
+    return os.path.join(_SAM_CACHE_DIR, f'{image_id}.dat')
+
+
+def _sam_cache_write(image_id, img_bytes, width, height):
+    """Persist image bytes + dimensions to disk for cross-worker access."""
+    meta = {'width': width, 'height': height}
+    path = _sam_cache_path(image_id)
+    with open(path + '.meta', 'w') as f:
+        _json.dump(meta, f)
+    with open(path, 'wb') as f:
+        f.write(img_bytes)
+
+
+def _sam_cache_read(image_id):
+    """Read cached image from disk. Returns (bytes, width, height) or None."""
+    path = _sam_cache_path(image_id)
+    meta_path = path + '.meta'
+    if not os.path.isfile(path) or not os.path.isfile(meta_path):
+        return None
+    with open(meta_path) as f:
+        meta = _json.load(f)
+    with open(path, 'rb') as f:
+        img_bytes = f.read()
+    return img_bytes, meta['width'], meta['height']
 
 SAM_CHECKPOINT = os.environ.get(
     'SAM_CHECKPOINT',
@@ -1457,16 +1485,13 @@ def foil_set_image():
         return jsonify({'error': 'imageId and imageBase64 are required'}), 400
 
     try:
+        global _sam_current_image_id
         img_bytes = base64.b64decode(image_b64)
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         img_array = np.array(img)
         predictor.set_image(img_array)
-        _sam_image_cache[image_id] = {
-            'bytes': img_bytes,       # stored so other workers can re-embed
-            'width': img.width,
-            'height': img.height,
-            'embedded_in_pid': os.getpid(),
-        }
+        _sam_current_image_id = image_id
+        _sam_cache_write(image_id, img_bytes, img.width, img.height)
         return jsonify({
             'ok': True,
             'width': img.width,
@@ -1486,19 +1511,20 @@ def foil_segment():
     y = data.get('y')
     if not image_id or x is None or y is None:
         return jsonify({'error': 'imageId, x, y are required'}), 400
-    if image_id not in _sam_image_cache:
-        return jsonify({'error': 'Image not set. Call /api/foil/set-image first.'}), 400
 
     try:
+        global _sam_current_image_id
         predictor = _get_sam_predictor()
 
-        # With multiple Gunicorn workers each worker has its own process memory.
-        # Re-embed the image if this worker hasn't done it yet.
-        info = _sam_image_cache[image_id]
-        if info.get('embedded_in_pid') != os.getpid():
-            img = Image.open(BytesIO(info['bytes'])).convert('RGB')
+        # If this worker doesn't have the image embedded, load from disk cache
+        if _sam_current_image_id != image_id:
+            cached = _sam_cache_read(image_id)
+            if cached is None:
+                return jsonify({'error': 'Image not set. Call /api/foil/set-image first.'}), 400
+            img_bytes, width, height = cached
+            img = Image.open(BytesIO(img_bytes)).convert('RGB')
             predictor.set_image(np.array(img))
-            info['embedded_in_pid'] = os.getpid()
+            _sam_current_image_id = image_id
 
         input_point = np.array([[int(x), int(y)]])
         input_label = np.array([1])
@@ -1511,17 +1537,19 @@ def foil_segment():
         best_idx = int(np.argmax(scores))
         mask = masks[best_idx]
 
-        # Explicit binary threshold — no dithering, no intermediate values
         mask_arr = np.where(mask, 255, 0).astype(np.uint8)
         mask_img = Image.fromarray(mask_arr, mode='L')
         buf = BytesIO()
         mask_img.save(buf, format='PNG')
         mask_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
 
+        cached = _sam_cache_read(image_id)
+        w = cached[1] if cached else 0
+        h = cached[2] if cached else 0
         return jsonify({
             'mask': mask_b64,
-            'width': info['width'],
-            'height': info['height'],
+            'width': w,
+            'height': h,
         })
     except Exception as e:
         log_error('/api/foil/segment', e)
