@@ -957,9 +957,9 @@
                     <div class="form-group" id="imageFitGroup">
                         <label for="image_fit">Image Fit Mode</label>
                         <select id="image_fit" name="image_fit">
-                            <option value="contain" selected>Contain (show full image, no cropping)</option>
+                            <option value="contain">Contain (show full image, no cropping)</option>
                             <option value="cover">Cover (fill area, may crop edges)</option>
-                            <option value="fill">Fill (stretch to fit exactly)</option>
+                            <option value="fill" selected>Fill (stretch to fit exactly)</option>
                         </select>
                         <p class="checkbox-description">How images are scaled to fit the panel dimensions.</p>
                     </div>
@@ -2077,8 +2077,18 @@ SOMEWHERE, ST 67890</textarea>
             }
         }
         printMode.addEventListener('change', updateFoilButtonVisibility);
-        imageInput.addEventListener('change', updateFoilButtonVisibility);
-        backImageInput.addEventListener('change', updateFoilButtonVisibility);
+        imageInput.addEventListener('change', () => {
+            updateFoilButtonVisibility();
+            foilState.front = [];
+            foilState.compositeFrontGold = '';
+            foilState.compositeFrontSilver = '';
+        });
+        backImageInput.addEventListener('change', () => {
+            updateFoilButtonVisibility();
+            foilState.back = [];
+            foilState.compositeBackGold = '';
+            foilState.compositeBackSilver = '';
+        });
 
         function resizeImageForSAM(dataUrl, maxDim) {
             return new Promise((resolve) => {
@@ -2086,7 +2096,7 @@ SOMEWHERE, ST 67890</textarea>
                 img.onload = () => {
                     let w = img.naturalWidth, h = img.naturalHeight;
                     if (w <= maxDim && h <= maxDim) {
-                        resolve({b64: dataUrl.split(',')[1], w, h});
+                        resolve({b64: dataUrl.split(',')[1], dataUrl, w, h});
                         return;
                     }
                     const scale = maxDim / Math.max(w, h);
@@ -2095,7 +2105,8 @@ SOMEWHERE, ST 67890</textarea>
                     const c = document.createElement('canvas');
                     c.width = nw; c.height = nh;
                     c.getContext('2d').drawImage(img, 0, 0, nw, nh);
-                    resolve({b64: c.toDataURL('image/jpeg', 0.9).split(',')[1], w: nw, h: nh});
+                    const resizedUrl = c.toDataURL('image/jpeg', 0.9);
+                    resolve({b64: resizedUrl.split(',')[1], dataUrl: resizedUrl, w: nw, h: nh});
                 };
                 img.src = dataUrl;
             });
@@ -2113,13 +2124,6 @@ SOMEWHERE, ST 67890</textarea>
 
             const reader = new FileReader();
             reader.onload = async (e) => {
-                foilImg.src = e.target.result;
-                foilImg.onload = () => {
-                    foilOverlayCanvas.width = foilImg.naturalWidth;
-                    foilOverlayCanvas.height = foilImg.naturalHeight;
-                    redrawFoilOverlay();
-                };
-
                 foilImageId = `foil-${panel}-${Date.now()}`;
                 foilSpinner.style.display = 'flex';
                 const foilStatus = document.getElementById('foilStatusText');
@@ -2128,6 +2132,15 @@ SOMEWHERE, ST 67890</textarea>
                     const resized = await resizeImageForSAM(e.target.result, 1024);
                     foilOrigW = resized.w;
                     foilOrigH = resized.h;
+
+                    // Display the resized image so click coords match SAM dimensions
+                    foilImg.src = resized.dataUrl;
+                    foilImg.onload = () => {
+                        foilOverlayCanvas.width = resized.w;
+                        foilOverlayCanvas.height = resized.h;
+                        redrawFoilOverlay();
+                    };
+
                     const resp = await fetch('/api/foil/set-image', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -2270,46 +2283,50 @@ SOMEWHERE, ST 67890</textarea>
             foilModal.style.display = 'none';
         });
 
-        document.getElementById('foilApplyBtn').addEventListener('click', () => {
-            // Composite masks per foil type into single PNGs
-            compositeFoilMasks(foilActivePanel);
+        document.getElementById('foilApplyBtn').addEventListener('click', async () => {
+            document.getElementById('foilStatusText').textContent = 'Compositing masks…';
+            await compositeFoilMasks(foilActivePanel);
             foilModal.style.display = 'none';
         });
 
         function compositeFoilMasks(panel) {
             const regions = foilState[panel];
             const types = ['gold', 'silver'];
-            types.forEach(type => {
+            const promises = types.map(type => {
                 const matching = regions.filter(r => r.foilType === type);
                 if (matching.length === 0) {
                     foilState[`composite${cap(panel)}${cap(type)}`] = '';
-                    return;
+                    return Promise.resolve();
                 }
-                const canvas = document.createElement('canvas');
-                canvas.width = foilOrigW;
-                canvas.height = foilOrigH;
-                const ctx = canvas.getContext('2d');
-                let loaded = 0;
-                matching.forEach((r, idx) => {
-                    const img = new window.Image();
-                    img.onload = () => {
-                        if (idx === 0) {
-                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        } else {
-                            ctx.globalCompositeOperation = 'lighter';
-                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                            ctx.globalCompositeOperation = 'source-over';
-                        }
-                        loaded++;
-                        if (loaded === matching.length) {
-                            const dataUrl = canvas.toDataURL('image/png');
-                            const b64 = dataUrl.split(',')[1];
-                            foilState[`composite${cap(panel)}${cap(type)}`] = b64;
-                        }
-                    };
-                    img.src = 'data:image/png;base64,' + r.maskB64;
+                return new Promise((resolve) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = foilOrigW;
+                    canvas.height = foilOrigH;
+                    const ctx = canvas.getContext('2d');
+                    let loaded = 0;
+                    matching.forEach((r, idx) => {
+                        const img = new window.Image();
+                        img.onload = () => {
+                            if (idx === 0) {
+                                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            } else {
+                                ctx.globalCompositeOperation = 'lighter';
+                                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                ctx.globalCompositeOperation = 'source-over';
+                            }
+                            loaded++;
+                            if (loaded === matching.length) {
+                                const dataUrl = canvas.toDataURL('image/png');
+                                const b64 = dataUrl.split(',')[1];
+                                foilState[`composite${cap(panel)}${cap(type)}`] = b64;
+                                resolve();
+                            }
+                        };
+                        img.src = 'data:image/png;base64,' + r.maskB64;
+                    });
                 });
             });
+            return Promise.all(promises);
         }
 
         function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
