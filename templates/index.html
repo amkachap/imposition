@@ -2209,11 +2209,25 @@ SOMEWHERE, ST 67890</textarea>
             foilSpinner.style.display = 'none';
         });
 
-        function drawOutlineFromMask(ctx, maskImg, cw, ch, color, lineWidth) {
+        function maskToAlpha(maskImg, cw, ch) {
             const tmp = document.createElement('canvas');
             tmp.width = cw; tmp.height = ch;
             const tctx = tmp.getContext('2d');
             tctx.drawImage(maskImg, 0, 0, cw, ch);
+            const imageData = tctx.getImageData(0, 0, cw, ch);
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const brightness = d[i];
+                d[i] = 255; d[i+1] = 255; d[i+2] = 255;
+                d[i+3] = brightness > 127 ? 255 : 0;
+            }
+            tctx.putImageData(imageData, 0, 0);
+            return tmp;
+        }
+
+        function drawOutlineFromMask(ctx, maskImg, cw, ch, color, lineWidth) {
+            const alphaCanvas = maskToAlpha(maskImg, cw, ch);
+            const tctx = alphaCanvas.getContext('2d');
             const imageData = tctx.getImageData(0, 0, cw, ch);
             const d = imageData.data;
 
@@ -2224,12 +2238,12 @@ SOMEWHERE, ST 67890</textarea>
             for (let y = step; y < ch - step; y++) {
                 for (let x = step; x < cw - step; x++) {
                     const idx = (y * cw + x) * 4;
-                    if (d[idx] > 127) {
+                    if (d[idx + 3] > 127) {
                         let isEdge = false;
                         for (let s = 1; s <= step && !isEdge; s++) {
                             const neighbors = [
-                                ((y-s)*cw + x)*4, ((y+s)*cw + x)*4,
-                                (y*cw + (x-s))*4, (y*cw + (x+s))*4
+                                ((y-s)*cw + x)*4 + 3, ((y+s)*cw + x)*4 + 3,
+                                (y*cw + (x-s))*4 + 3, (y*cw + (x+s))*4 + 3
                             ];
                             isEdge = neighbors.some(n => n >= 0 && n < d.length && d[n] < 127);
                         }
@@ -2258,22 +2272,21 @@ SOMEWHERE, ST 67890</textarea>
             const img = new window.Image();
             img.onload = () => {
                 const color = region.foilType === 'gold' ? [212,175,55] : [192,192,200];
-                const edgeCanvas = drawOutlineFromMask(ctx, img, cw, ch, color, 4);
-
-                ctx.globalAlpha = 1.0;
+                const edgeCanvas = drawOutlineFromMask(ctx, img, cw, ch, color, 12);
                 ctx.drawImage(edgeCanvas, 0, 0);
 
-                // Light fill inside the region for preview
-                const tmp = document.createElement('canvas');
-                tmp.width = cw; tmp.height = ch;
-                const tctx = tmp.getContext('2d');
-                tctx.drawImage(img, 0, 0, cw, ch);
-                tctx.globalCompositeOperation = 'source-atop';
+                const alphaCanvas = maskToAlpha(img, cw, ch);
+                const tint = document.createElement('canvas');
+                tint.width = cw; tint.height = ch;
+                const tctx = tint.getContext('2d');
                 tctx.fillStyle = region.foilType === 'gold'
                     ? 'rgba(212,175,55,1)' : 'rgba(192,192,200,1)';
                 tctx.fillRect(0, 0, cw, ch);
-                ctx.globalAlpha = 0.3;
-                ctx.drawImage(tmp, 0, 0);
+                tctx.globalCompositeOperation = 'destination-in';
+                tctx.drawImage(alphaCanvas, 0, 0);
+
+                ctx.globalAlpha = 0.35;
+                ctx.drawImage(tint, 0, 0);
                 ctx.globalAlpha = 1.0;
             };
             img.src = 'data:image/png;base64,' + region.maskB64;
@@ -2292,8 +2305,7 @@ SOMEWHERE, ST 67890</textarea>
                 const img = new window.Image();
                 img.onload = () => {
                     const color = r.foilType === 'gold' ? [212,175,55] : [192,192,200];
-                    const edgeCanvas = drawOutlineFromMask(ctx, img, cw, ch, color, 3);
-                    ctx.globalAlpha = 1.0;
+                    const edgeCanvas = drawOutlineFromMask(ctx, img, cw, ch, color, 10);
                     ctx.drawImage(edgeCanvas, 0, 0);
                     drawNext(i + 1);
                 };
