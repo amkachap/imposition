@@ -34,4 +34,7 @@ dist/
 # Local development
 *.sqlite3
 
+# SAM model checkpoints
+*.pth
+
 

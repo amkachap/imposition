@@ -601,6 +601,124 @@
             margin-top: 2px;
         }
 
+        /* Foil selection modal */
+        .foil-modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1100;
+            padding: 20px;
+            overflow: auto;
+        }
+        .foil-modal {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+        }
+        .foil-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .foil-canvas-wrap {
+            position: relative;
+            display: inline-block;
+            cursor: crosshair;
+            border-radius: var(--radius);
+            overflow: hidden;
+            max-width: 100%;
+        }
+        .foil-canvas-wrap img {
+            display: block;
+            max-width: 100%;
+            max-height: 60vh;
+        }
+        .foil-canvas-wrap canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .foil-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .foil-toolbar label { font-size: 13px; font-weight: 500; }
+        .foil-toolbar select {
+            padding: 5px 10px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            font-family: inherit;
+            font-size: 13px;
+        }
+        .foil-region-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .foil-region-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .foil-region-chip.gold {
+            background: rgba(212,175,55,0.2);
+            color: #a08520;
+            border: 1px solid rgba(212,175,55,0.4);
+        }
+        .foil-region-chip.silver {
+            background: rgba(160,160,170,0.2);
+            color: #707078;
+            border: 1px solid rgba(160,160,170,0.4);
+        }
+        .foil-region-chip button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            opacity: 0.6;
+            color: inherit;
+        }
+        .foil-region-chip button:hover { opacity: 1; }
+        .foil-spinner {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.4);
+            border-radius: var(--radius);
+            z-index: 5;
+        }
+        .foil-spinner::after {
+            content: '';
+            width: 36px; height: 36px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        .foil-btn-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+
         .label-hint {
             font-weight: 400;
             color: var(--text-muted);
@@ -914,6 +1032,7 @@
                             <input type="file" id="imageInput" name="image" accept=".png,.jpg,.jpeg,.gif,.webp,.tiff,.tif" hidden>
                             <div class="file-info hidden" id="fileInfo"></div>
                             <img id="imagePreview" alt="Preview">
+                            <button type="button" class="remove-image-btn" id="foilFrontBtn" style="display:none;color:var(--accent);border-color:var(--accent);">Select Foil Regions</button>
                         </div>
                     </div>
 
@@ -944,6 +1063,7 @@
                             <div class="file-info hidden" id="backFileInfo"></div>
                             <img id="backImagePreview" class="image-preview-small" alt="Preview">
                             <button type="button" class="remove-image-btn" id="removeBackImage">Remove</button>
+                            <button type="button" class="remove-image-btn" id="foilBackBtn" style="display:none;color:var(--accent);border-color:var(--accent);">Select Foil Regions</button>
                         </div>
                     </div>
 
@@ -1057,6 +1177,34 @@ SOMEWHERE, ST 67890</textarea>
                 </div>
             </div>
             <div id="visualPreviewContainer" style="display:flex; flex-wrap:wrap; gap:20px; justify-content:center;"></div>
+        </div>
+    </div>
+
+    <!-- Foil Selection Modal -->
+    <div class="foil-modal-backdrop" id="foilModal">
+        <div class="foil-modal">
+            <div class="foil-modal-header">
+                <h3 style="margin:0;" id="foilModalTitle">Select Foil Regions — Front</h3>
+                <button class="btn btn-secondary" id="foilCancelBtn" type="button" style="padding:8px 16px;">Cancel</button>
+            </div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Click on elements in the image to select them for foil. Click a selected region again to remove it.</p>
+            <div class="foil-canvas-wrap" id="foilCanvasWrap">
+                <img id="foilImg" alt="Panel">
+                <canvas id="foilOverlayCanvas"></canvas>
+                <div class="foil-spinner" id="foilSpinner" style="display:none;"></div>
+            </div>
+            <div class="foil-toolbar">
+                <label>Foil type for next click:</label>
+                <select id="foilTypeSelect">
+                    <option value="gold">Gold</option>
+                    <option value="silver">Silver</option>
+                </select>
+            </div>
+            <div class="foil-region-list" id="foilRegionList"></div>
+            <div class="foil-btn-row">
+                <button type="button" class="btn btn-secondary" id="foilClearBtn" style="padding:10px 18px;">Clear All</button>
+                <button type="button" class="btn btn-primary" id="foilApplyBtn" style="padding:10px 18px;">Apply</button>
+            </div>
         </div>
     </div>
 
@@ -1601,7 +1749,15 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('ai_color', document.getElementById('ai_color').value);
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
-            
+
+            // Foil composite masks
+            if (printMode.value === 'foil') {
+                if (foilState.compositeFrontGold) formData.append('foil_front_gold', foilState.compositeFrontGold);
+                if (foilState.compositeFrontSilver) formData.append('foil_front_silver', foilState.compositeFrontSilver);
+                if (foilState.compositeBackGold) formData.append('foil_back_gold', foilState.compositeBackGold);
+                if (foilState.compositeBackSilver) formData.append('foil_back_silver', foilState.compositeBackSilver);
+            }
+
             if (cardType.value === 'envelope') {
                 formData.append('return_name', document.getElementById('return_name').value);
                 formData.append('return_address', document.getElementById('return_address').value);
@@ -1866,6 +2022,248 @@ SOMEWHERE, ST 67890</textarea>
         
         document.getElementById('delivery_name').addEventListener('input', updateFontPreview);
         document.getElementById('delivery_address').addEventListener('input', updateFontPreview);
+
+        // ---- Foil selection system ----
+        const foilState = {
+            front: [],  // [{id, maskB64, foilType, x, y}, ...]
+            back: [],
+            compositeFrontGold: '',
+            compositeFrontSilver: '',
+            compositeBackGold: '',
+            compositeBackSilver: '',
+        };
+        let foilActivePanel = 'front';
+        let foilImageId = '';
+        let foilOrigW = 0, foilOrigH = 0;
+        let foilEmbeddingReady = false;
+
+        const foilModal = document.getElementById('foilModal');
+        const foilImg = document.getElementById('foilImg');
+        const foilOverlayCanvas = document.getElementById('foilOverlayCanvas');
+        const foilSpinner = document.getElementById('foilSpinner');
+        const foilRegionList = document.getElementById('foilRegionList');
+        const foilTypeSelect = document.getElementById('foilTypeSelect');
+        const foilFrontBtn = document.getElementById('foilFrontBtn');
+        const foilBackBtn = document.getElementById('foilBackBtn');
+
+        function updateFoilButtonVisibility() {
+            const isFoil = printMode.value === 'foil';
+            const hasFront = imageInput.files.length > 0;
+            const hasBack = backImageInput.files.length > 0;
+            foilFrontBtn.style.display = (isFoil && hasFront) ? 'inline-block' : 'none';
+            foilBackBtn.style.display = (isFoil && hasBack) ? 'inline-block' : 'none';
+        }
+        printMode.addEventListener('change', updateFoilButtonVisibility);
+        imageInput.addEventListener('change', updateFoilButtonVisibility);
+        backImageInput.addEventListener('change', updateFoilButtonVisibility);
+
+        async function openFoilModal(panel) {
+            foilActivePanel = panel;
+            const file = panel === 'front' ? imageInput.files[0] : backImageInput.files[0];
+            if (!file) return;
+
+            document.getElementById('foilModalTitle').textContent =
+                `Select Foil Regions — ${panel === 'front' ? 'Front' : 'Back'}`;
+            foilModal.style.display = 'block';
+            foilEmbeddingReady = false;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                foilImg.src = e.target.result;
+                foilImg.onload = () => {
+                    foilOverlayCanvas.width = foilImg.naturalWidth;
+                    foilOverlayCanvas.height = foilImg.naturalHeight;
+                    redrawFoilOverlay();
+                };
+
+                const b64 = e.target.result.split(',')[1];
+                foilImageId = `foil-${panel}-${Date.now()}`;
+                foilSpinner.style.display = 'flex';
+                try {
+                    const resp = await fetch('/api/foil/set-image', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({imageId: foilImageId, imageBase64: b64}),
+                    });
+                    const d = await resp.json();
+                    if (d.ok) {
+                        foilOrigW = d.width;
+                        foilOrigH = d.height;
+                        foilEmbeddingReady = true;
+                    } else {
+                        alert('SAM error: ' + (d.error || 'unknown'));
+                    }
+                } catch (err) {
+                    alert('Failed to set image: ' + err.message);
+                }
+                foilSpinner.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+            renderFoilChips();
+        }
+
+        foilFrontBtn.addEventListener('click', (e) => { e.stopPropagation(); openFoilModal('front'); });
+        foilBackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFoilModal('back'); });
+
+        document.getElementById('foilCanvasWrap').addEventListener('click', async (e) => {
+            if (!foilEmbeddingReady) return;
+            const rect = foilImg.getBoundingClientRect();
+            const scaleX = foilOrigW / rect.width;
+            const scaleY = foilOrigH / rect.height;
+            const x = Math.round((e.clientX - rect.left) * scaleX);
+            const y = Math.round((e.clientY - rect.top) * scaleY);
+
+            const regions = foilState[foilActivePanel];
+            const existing = regions.find(r => {
+                const img = new window.Image();
+                return false; // deselection checked after segment returns
+            });
+
+            foilSpinner.style.display = 'flex';
+            try {
+                const resp = await fetch('/api/foil/segment', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({imageId: foilImageId, x, y}),
+                });
+                const d = await resp.json();
+                if (d.error) { alert(d.error); foilSpinner.style.display = 'none'; return; }
+
+                // Check for deselection: if click point is inside an existing mask
+                let removed = false;
+                for (let i = regions.length - 1; i >= 0; i--) {
+                    if (isPointInMask(regions[i].maskB64, x, y, foilOrigW, foilOrigH)) {
+                        regions.splice(i, 1);
+                        removed = true;
+                        break;
+                    }
+                }
+                if (!removed) {
+                    regions.push({
+                        id: crypto.randomUUID(),
+                        maskB64: d.mask,
+                        foilType: foilTypeSelect.value,
+                        x, y,
+                    });
+                }
+                redrawFoilOverlay();
+                renderFoilChips();
+            } catch (err) {
+                alert('Segment error: ' + err.message);
+            }
+            foilSpinner.style.display = 'none';
+        });
+
+        function isPointInMask(maskB64, px, py, origW, origH) {
+            // Quick check: decode mask, sample pixel at (px, py)
+            // We use a temporary canvas for this
+            return false; // simplified — always adds new region
+        }
+
+        function redrawFoilOverlay() {
+            const ctx = foilOverlayCanvas.getContext('2d');
+            ctx.clearRect(0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
+            const regions = foilState[foilActivePanel];
+            let loaded = 0;
+            if (regions.length === 0) return;
+            regions.forEach(r => {
+                const img = new window.Image();
+                img.onload = () => {
+                    ctx.globalAlpha = 0.45;
+                    if (r.foilType === 'gold') {
+                        ctx.globalCompositeOperation = 'source-over';
+                        ctx.drawImage(img, 0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
+                        ctx.globalCompositeOperation = 'source-atop';
+                        ctx.fillStyle = 'rgba(212,175,55,0.7)';
+                        ctx.fillRect(0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
+                        ctx.globalCompositeOperation = 'source-over';
+                    } else {
+                        ctx.globalCompositeOperation = 'source-over';
+                        ctx.drawImage(img, 0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
+                        ctx.globalCompositeOperation = 'source-atop';
+                        ctx.fillStyle = 'rgba(192,192,200,0.7)';
+                        ctx.fillRect(0, 0, foilOverlayCanvas.width, foilOverlayCanvas.height);
+                        ctx.globalCompositeOperation = 'source-over';
+                    }
+                    ctx.globalAlpha = 1.0;
+                };
+                img.src = 'data:image/png;base64,' + r.maskB64;
+            });
+        }
+
+        function renderFoilChips() {
+            const regions = foilState[foilActivePanel];
+            foilRegionList.innerHTML = regions.map((r, i) =>
+                `<span class="foil-region-chip ${r.foilType}">
+                    Region ${i + 1} (${r.foilType})
+                    <button data-idx="${i}">&times;</button>
+                </span>`
+            ).join('');
+            foilRegionList.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const idx = parseInt(e.currentTarget.dataset.idx);
+                    regions.splice(idx, 1);
+                    redrawFoilOverlay();
+                    renderFoilChips();
+                });
+            });
+        }
+
+        document.getElementById('foilClearBtn').addEventListener('click', () => {
+            foilState[foilActivePanel] = [];
+            redrawFoilOverlay();
+            renderFoilChips();
+        });
+
+        document.getElementById('foilCancelBtn').addEventListener('click', () => {
+            foilModal.style.display = 'none';
+        });
+
+        document.getElementById('foilApplyBtn').addEventListener('click', () => {
+            // Composite masks per foil type into single PNGs
+            compositeFoilMasks(foilActivePanel);
+            foilModal.style.display = 'none';
+        });
+
+        function compositeFoilMasks(panel) {
+            const regions = foilState[panel];
+            const types = ['gold', 'silver'];
+            types.forEach(type => {
+                const matching = regions.filter(r => r.foilType === type);
+                if (matching.length === 0) {
+                    foilState[`composite${cap(panel)}${cap(type)}`] = '';
+                    return;
+                }
+                // Composite: OR all masks of this type together on a canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = foilOrigW;
+                canvas.height = foilOrigH;
+                const ctx = canvas.getContext('2d');
+                let loaded = 0;
+                matching.forEach(r => {
+                    const img = new window.Image();
+                    img.onload = () => {
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        loaded++;
+                        if (loaded === matching.length) {
+                            const dataUrl = canvas.toDataURL('image/png');
+                            const b64 = dataUrl.split(',')[1];
+                            foilState[`composite${cap(panel)}${cap(type)}`] = b64;
+                        }
+                    };
+                    img.src = 'data:image/png;base64,' + r.maskB64;
+                });
+            });
+        }
+
+        function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+        // Close foil modal on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && foilModal.style.display === 'block') {
+                foilModal.style.display = 'none';
+            }
+        });
 
         // Initialize
         loadIccProfiles();

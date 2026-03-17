@@ -18,6 +18,40 @@ from werkzeug.utils import secure_filename
 import docraptor
 from PIL import Image, ImageChops, ImageFilter
 from collections import Counter
+import numpy as np
+
+# SAM (Segment Anything Model) — lazy-loaded on first use
+_sam_predictor = None
+_sam_image_cache = {}
+
+SAM_CHECKPOINT = os.environ.get(
+    'SAM_CHECKPOINT',
+    os.path.join(os.path.dirname(__file__), 'sam_vit_b_01ec64.pth'),
+)
+SAM_MODEL_TYPE = os.environ.get('SAM_MODEL_TYPE', 'vit_b')
+
+
+def _get_sam_predictor():
+    """Lazy-load SAM model on first call so startup stays fast."""
+    global _sam_predictor
+    if _sam_predictor is not None:
+        return _sam_predictor
+
+    if not os.path.isfile(SAM_CHECKPOINT):
+        raise RuntimeError(
+            f'SAM checkpoint not found at {SAM_CHECKPOINT}. '
+            'Download from https://dl.fbaipublicai.com/segment_anything/sam_vit_b_01ec64.pth'
+        )
+
+    import torch
+    from segment_anything import sam_model_registry, SamPredictor
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    sam = sam_model_registry[SAM_MODEL_TYPE](checkpoint=SAM_CHECKPOINT)
+    sam.to(device=device)
+    _sam_predictor = SamPredictor(sam)
+    print(f'SAM model loaded ({SAM_MODEL_TYPE}) on {device}')
+    return _sam_predictor
 
 app = Flask(__name__)
 
@@ -346,6 +380,31 @@ def generate_fluorescent_svg(mask_base64, mask_id, vb_w, vb_h, css_pos):
     )
 
 
+def generate_foil_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, foil_color_name):
+    """Build an inline SVG for a foil spot-color layer (no overprint — foil
+    is opaque and knocks out the CMYK underneath)."""
+    return (
+        f'<svg viewBox="0 0 {vb_w} {vb_h}"'
+        f' xmlns="http://www.w3.org/2000/svg"'
+        f' xmlns:xlink="http://www.w3.org/1999/xlink"'
+        f' style="position:absolute;z-index:2;pointer-events:none;{css_pos}">'
+        f'<defs><mask id="{mask_id}">'
+        f'<image href="data:image/png;base64,{mask_base64}"'
+        f' width="{vb_w}" height="{vb_h}" preserveAspectRatio="none"/>'
+        f'</mask></defs>'
+        f'<rect width="{vb_w}" height="{vb_h}"'
+        f' style="fill:prince-color({foil_color_name});"'
+        f' mask="url(#{mask_id})"/>'
+        f'</svg>'
+    )
+
+
+def _get_mask_dimensions(mask_b64):
+    """Get pixel dimensions of a base64-encoded PNG mask image."""
+    img = Image.open(BytesIO(base64.b64decode(mask_b64)))
+    return img.width, img.height
+
+
 # PDF profiles available in DocRaptor/Prince
 PDF_PROFILES = [
     'PDF/X-4',
@@ -434,6 +493,24 @@ def get_spot_color_css(settings):
             alternate-color: cmyk(0, 0.85, 0.35, 0);
         }
         """
+    if print_mode == 'foil':
+        css = ''
+        foil_regions = settings.get('foil_regions', {})
+        has_gold = bool(foil_regions.get('front_gold') or foil_regions.get('back_gold'))
+        has_silver = bool(foil_regions.get('front_silver') or foil_regions.get('back_silver'))
+        if has_gold:
+            css += """
+        @prince-color GoldFoil {
+            alternate-color: cmyk(0, 0.18, 0.75, 0.18);
+        }
+            """
+        if has_silver:
+            css += """
+        @prince-color SilverFoil {
+            alternate-color: cmyk(0, 0, 0, 0.3);
+        }
+            """
+        return css
     return ''
 
 
@@ -695,6 +772,29 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             if back_mask:
                 pink_back_html = generate_fluorescent_svg(back_mask, 'pink-mask-back', bm_w, bm_h, pos_full)
 
+    # Foil spot color support (user-selected regions via SAM masks)
+    is_foil = settings.get('print_mode') == 'foil'
+    foil_front_html = ''
+    foil_back_html = ''
+    if is_foil:
+        pos_full = f"top:-{bleed}in;left:-{bleed}in;width:{total_width}in;height:{total_height}in;"
+        foil_regions = settings.get('foil_regions', {})
+        for foil_type, color_name in [('gold', 'GoldFoil'), ('silver', 'SilverFoil')]:
+            front_key = f'front_{foil_type}'
+            back_key = f'back_{foil_type}'
+            if foil_regions.get(front_key):
+                fw, fh = _get_mask_dimensions(foil_regions[front_key])
+                foil_front_html += generate_foil_svg(
+                    foil_regions[front_key],
+                    f'{foil_type}-foil-mask-front', fw, fh, pos_full, color_name
+                )
+            if foil_regions.get(back_key):
+                bw, bh = _get_mask_dimensions(foil_regions[back_key])
+                foil_back_html += generate_foil_svg(
+                    foil_regions[back_key],
+                    f'{foil_type}-foil-mask-back', bw, bh, pos_full, color_name
+                )
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -772,6 +872,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Card Front">
         </div>
         {pink_front_html}
+        {foil_front_html}
     </div>
     
     <!-- Page 2: Back -->
@@ -783,6 +884,7 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         {branding_bg_html}
         {branding_img_html}
         {pink_back_html}
+        {foil_back_html}
     </div>
 </body>
 </html>"""
@@ -1305,6 +1407,84 @@ def delete_icc_profile(filename):
         return jsonify({'error': 'Profile not found'}), 404
 
 
+# ---------- Foil / SAM segmentation endpoints ----------
+
+@app.route('/api/foil/set-image', methods=['POST'])
+def foil_set_image():
+    """Compute SAM embedding for an uploaded image. Call once per image."""
+    try:
+        predictor = _get_sam_predictor()
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 503
+
+    data = request.get_json(silent=True) or {}
+    image_id = data.get('imageId', '')
+    image_b64 = data.get('imageBase64', '')
+    if not image_id or not image_b64:
+        return jsonify({'error': 'imageId and imageBase64 are required'}), 400
+
+    try:
+        img = Image.open(BytesIO(base64.b64decode(image_b64))).convert('RGB')
+        img_array = np.array(img)
+        predictor.set_image(img_array)
+        _sam_image_cache[image_id] = {
+            'width': img.width,
+            'height': img.height,
+            'embedding_set': True,
+        }
+        return jsonify({
+            'ok': True,
+            'width': img.width,
+            'height': img.height,
+        })
+    except Exception as e:
+        log_error('/api/foil/set-image', e)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/foil/segment', methods=['POST'])
+def foil_segment():
+    """Return a binary mask for the region at the given click point."""
+    data = request.get_json(silent=True) or {}
+    image_id = data.get('imageId', '')
+    x = data.get('x')
+    y = data.get('y')
+    if not image_id or x is None or y is None:
+        return jsonify({'error': 'imageId, x, y are required'}), 400
+    if image_id not in _sam_image_cache:
+        return jsonify({'error': 'Image not set. Call /api/foil/set-image first.'}), 400
+
+    try:
+        predictor = _get_sam_predictor()
+        input_point = np.array([[int(x), int(y)]])
+        input_label = np.array([1])
+
+        masks, scores, _ = predictor.predict(
+            point_coords=input_point,
+            point_labels=input_label,
+            multimask_output=True,
+        )
+        best_idx = int(np.argmax(scores))
+        mask = masks[best_idx]
+
+        mask_img = Image.fromarray((mask * 255).astype(np.uint8), mode='L')
+        buf = BytesIO()
+        mask_img.save(buf, format='PNG')
+        mask_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+
+        info = _sam_image_cache[image_id]
+        return jsonify({
+            'mask': mask_b64,
+            'width': info['width'],
+            'height': info['height'],
+        })
+    except Exception as e:
+        log_error('/api/foil/segment', e)
+        return jsonify({'error': str(e)}), 500
+
+
+# ---------- PDF generation ----------
+
 @app.route('/generate', methods=['POST'])
 def generate_pdf():
     """Accept upload, spawn background process, return job_id immediately.
@@ -1471,6 +1651,15 @@ def _process_generate(form_data, files_data):
         'ai_color': form_data.get('ai_color', '#000000'),
         'test_mode': form_data.get('test_mode') == 'true',
     }
+
+    # Foil masks — base64 PNGs sent from the frontend foil selection UI
+    if print_mode == 'foil':
+        foil_regions = {}
+        for key in ('front_gold', 'front_silver', 'back_gold', 'back_silver'):
+            val = form_data.get(f'foil_{key}', '').strip()
+            if val:
+                foil_regions[key] = val
+        settings['foil_regions'] = foil_regions
 
     if card_type == 'envelope':
         settings['envelope'] = {
