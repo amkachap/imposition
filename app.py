@@ -40,7 +40,7 @@ def _get_sam_predictor():
     if not os.path.isfile(SAM_CHECKPOINT):
         raise RuntimeError(
             f'SAM checkpoint not found at {SAM_CHECKPOINT}. '
-            'Download from https://dl.fbaipublicai.com/segment_anything/sam_vit_b_01ec64.pth'
+            'Download from https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth'
         )
 
     import torch

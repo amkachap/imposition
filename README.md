@@ -12,6 +12,7 @@ A Flask application for testing different PDF output settings using the DocRapto
   - **Folded Card**: 2 spreads (Panel 4|1 outside, Panel 2|3 inside)
 - **Color Options**: True black text, CMYK color conversion
 - **Image Fit Modes**: Cover, contain, or fill
+- **Foil (Gold/Silver)**: Click-to-select regions on panel images using SAM (Segment Anything Model); generates spot color channels for foil printing
 - **Test Mode**: Generate watermarked test PDFs without using quota
 - **HTML Preview**: View the generated HTML before sending to DocRaptor
 
@@ -43,6 +44,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# For Foil (click-to-select) feature: download SAM checkpoint
+# Place sam_vit_b_01ec64.pth in the project root, or set SAM_CHECKPOINT env var
+curl -L -o sam_vit_b_01ec64.pth \
+  https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
 ```
 
 ## Usage
