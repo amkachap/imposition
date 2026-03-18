@@ -659,6 +659,19 @@
             font-family: inherit;
             font-size: 13px;
         }
+        .foil-mode-btn {
+            padding: 5px 12px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        .foil-mode-btn:hover { background: var(--bg-secondary); }
+        .foil-mode-btn.active { border-color: var(--primary); background: rgba(59, 130, 246, 0.15); color: var(--primary); }
+        .foil-mode-btn[data-mode="exclude"].active { border-color: #ef4444; background: rgba(239, 68, 68, 0.15); color: #ef4444; }
         .foil-region-list {
             display: flex;
             flex-wrap: wrap;
@@ -1198,7 +1211,7 @@ SOMEWHERE, ST 67890</textarea>
                 <h3 style="margin:0;" id="foilModalTitle">Select Foil Regions — Front</h3>
                 <button class="btn btn-secondary" id="foilCancelBtn" type="button" style="padding:8px 16px;">Cancel</button>
             </div>
-            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Click on elements in the image to select them for foil. Click a selected region again to remove it.</p>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Click to select regions for foil. Use Exclude mode (or hold Shift) to cut out areas like text. Add points, then Confirm when done.</p>
             <div class="foil-canvas-wrap" id="foilCanvasWrap">
                 <img id="foilImg" alt="Panel">
                 <canvas id="foilOverlayCanvas"></canvas>
@@ -1211,7 +1224,13 @@ SOMEWHERE, ST 67890</textarea>
                 <button id="foilConfirmNo" type="button" style="background:#ef4444;color:#fff;padding:7px 20px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;">Reject</button>
             </div>
             <div class="foil-toolbar">
-                <label>Foil type for next click:</label>
+                <label>Mode:</label>
+                <div style="display:flex;gap:6px;">
+                    <button id="foilModeSelect" type="button" class="foil-mode-btn active" data-mode="select">Select</button>
+                    <button id="foilModeExclude" type="button" class="foil-mode-btn" data-mode="exclude">Exclude</button>
+                </div>
+                <span style="font-size:11px;color:var(--text-muted);">(hold Shift to exclude)</span>
+                <label style="margin-left:12px;">Foil type:</label>
                 <select id="foilTypeSelect">
                     <option value="gold">Gold</option>
                     <option value="silver">Silver</option>
@@ -2060,6 +2079,7 @@ SOMEWHERE, ST 67890</textarea>
         let foilOrigW = 0, foilOrigH = 0;
         let foilEmbeddingReady = false;
         let foilPendingRegion = null;
+        let foilClickMode = 'select';
 
         const foilModal = document.getElementById('foilModal');
         const foilImg = document.getElementById('foilImg');
@@ -2128,7 +2148,11 @@ SOMEWHERE, ST 67890</textarea>
             foilModal.style.display = 'block';
             foilEmbeddingReady = false;
             foilPendingRegion = null;
+            foilClickMode = 'select';
             document.getElementById('foilConfirmBar').style.display = 'none';
+            document.querySelectorAll('.foil-mode-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.mode === 'select');
+            });
 
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -2174,13 +2198,29 @@ SOMEWHERE, ST 67890</textarea>
         foilFrontBtn.addEventListener('click', (e) => { e.stopPropagation(); openFoilModal('front'); });
         foilBackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFoilModal('back'); });
 
+        document.querySelectorAll('.foil-mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.foil-mode-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                foilClickMode = btn.dataset.mode;
+            });
+        });
+
         document.getElementById('foilCanvasWrap').addEventListener('click', async (e) => {
-            if (!foilEmbeddingReady || foilPendingRegion) return;
+            if (!foilEmbeddingReady || foilSpinner.style.display === 'flex') return;
             const rect = foilImg.getBoundingClientRect();
             const scaleX = foilOrigW / rect.width;
             const scaleY = foilOrigH / rect.height;
             const x = Math.round((e.clientX - rect.left) * scaleX);
             const y = Math.round((e.clientY - rect.top) * scaleY);
+            const label = (foilClickMode === 'exclude' || e.shiftKey) ? 0 : 1;
+
+            const points = foilPendingRegion ? [...foilPendingRegion.points, {x, y, label}] : [{x, y, label}];
+            if (!foilPendingRegion) {
+                foilPendingRegion = { id: crypto.randomUUID(), points: [], maskB64: '', foilType: foilTypeSelect.value };
+            }
+            foilPendingRegion.points = points;
+            foilPendingRegion.foilType = foilTypeSelect.value;
 
             foilSpinner.style.display = 'flex';
             document.getElementById('foilStatusText').textContent = 'Segmenting…';
@@ -2188,20 +2228,20 @@ SOMEWHERE, ST 67890</textarea>
                 const resp = await fetch('/api/foil/segment', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({imageId: foilImageId, x, y}),
+                    body: JSON.stringify({
+                        imageId: foilImageId,
+                        points: points.map(p => [p.x, p.y]),
+                        labels: points.map(p => p.label),
+                    }),
                 });
                 const d = await resp.json();
                 if (d.error) { alert(d.error); foilSpinner.style.display = 'none'; return; }
 
-                foilPendingRegion = {
-                    id: crypto.randomUUID(),
-                    maskB64: d.mask,
-                    foilType: foilTypeSelect.value,
-                    x, y,
-                };
+                foilPendingRegion.maskB64 = d.mask;
                 drawPendingOutline(foilPendingRegion);
                 document.getElementById('foilConfirmBar').style.display = 'flex';
-                document.getElementById('foilStatusText').textContent = 'Region detected — confirm or reject.';
+                document.getElementById('foilStatusText').textContent =
+                    points.length > 1 ? `Region refined — add more points or Confirm.` : 'Region detected — add exclude points or Confirm.';
             } catch (err) {
                 alert('Segment error: ' + err.message);
                 document.getElementById('foilStatusText').textContent = '';
@@ -2269,6 +2309,8 @@ SOMEWHERE, ST 67890</textarea>
             const cw = foilOverlayCanvas.width, ch = foilOverlayCanvas.height;
             redrawConfirmedOutlines();
 
+            if (!region.maskB64) return;
+
             const img = new window.Image();
             img.onload = () => {
                 const color = region.foilType === 'gold' ? [212,175,55] : [192,192,200];
@@ -2288,6 +2330,16 @@ SOMEWHERE, ST 67890</textarea>
                 ctx.globalAlpha = 0.35;
                 ctx.drawImage(tint, 0, 0);
                 ctx.globalAlpha = 1.0;
+
+                (region.points || []).forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                    ctx.strokeStyle = p.label === 1 ? '#22c55e' : '#ef4444';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.fillStyle = p.label === 1 ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)';
+                    ctx.fill();
+                });
             };
             img.src = 'data:image/png;base64,' + region.maskB64;
         }

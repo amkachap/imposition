@@ -1520,13 +1520,21 @@ def foil_set_image():
 
 @app.route('/api/foil/segment', methods=['POST'])
 def foil_segment():
-    """Return a binary mask for the region at the given click point."""
+    """Return a binary mask for the region at the given click point(s).
+    Accepts either points+labels (multi-point) or legacy x,y (single positive point)."""
     data = request.get_json(silent=True) or {}
     image_id = data.get('imageId', '')
-    x = data.get('x')
-    y = data.get('y')
-    if not image_id or x is None or y is None:
-        return jsonify({'error': 'imageId, x, y are required'}), 400
+    points = data.get('points')
+    labels = data.get('labels')
+    x, y = data.get('x'), data.get('y')
+
+    # Support legacy single-point format
+    if points is None and labels is None and x is not None and y is not None:
+        points = [[int(x), int(y)]]
+        labels = [1]
+
+    if not image_id or not points or not labels or len(points) != len(labels):
+        return jsonify({'error': 'imageId and (points, labels) or (x, y) are required'}), 400
 
     try:
         global _sam_current_image_id
@@ -1542,12 +1550,12 @@ def foil_segment():
             predictor.set_image(np.array(img))
             _sam_current_image_id = image_id
 
-        input_point = np.array([[int(x), int(y)]])
-        input_label = np.array([1])
+        input_points = np.array([[int(p[0]), int(p[1])] for p in points])
+        input_labels = np.array([int(l) for l in labels])
 
         masks, scores, _ = predictor.predict(
-            point_coords=input_point,
-            point_labels=input_label,
+            point_coords=input_points,
+            point_labels=input_labels,
             multimask_output=True,
         )
         best_idx = int(np.argmax(scores))
