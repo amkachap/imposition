@@ -6,7 +6,7 @@ Flask app for print-ready PDFs (cards, invites, envelopes) via DocRaptor API.
 import json as _json
 import os
 import base64
-import multiprocessing
+import threading
 import tempfile
 import time
 import traceback
@@ -223,6 +223,46 @@ PRINT_DIMENSIONS = {
     'folded': {'panel_w': 5.25, 'panel_h': 7.25, 'spread_w': 10.25, 'spread_h': 7.25},
     'envelope': {'panel_w': 7.5, 'panel_h': 5.5},
 }
+
+
+MAX_EMBED_PX = 3000  # max pixels on longest side for DocRaptor embedding
+
+
+def downsize_for_embed(image_data_base64, image_type):
+    """Downsize image and convert PNG→JPEG to reduce HTML payload for DocRaptor.
+
+    Returns (new_base64, new_type) — always JPEG unless image has transparency.
+    """
+    try:
+        image_bytes = base64.b64decode(image_data_base64)
+        img = Image.open(BytesIO(image_bytes))
+        w, h = img.size
+
+        has_alpha = img.mode in ('RGBA', 'LA', 'PA')
+        needs_resize = max(w, h) > MAX_EMBED_PX
+        is_png = image_type.lower() in ('png',)
+
+        if not needs_resize and not is_png:
+            return image_data_base64, image_type
+
+        if needs_resize:
+            scale = MAX_EMBED_PX / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+        buf = BytesIO()
+        if has_alpha:
+            img.save(buf, format='PNG', optimize=True)
+            new_type = 'png'
+        else:
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img.save(buf, format='JPEG', quality=92)
+            new_type = 'jpeg'
+
+        return base64.b64encode(buf.getvalue()).decode('utf-8'), new_type
+    except Exception as e:
+        print(f"Error in downsize_for_embed: {e}")
+        return image_data_base64, image_type
 
 
 def ensure_print_dpi(image_data_base64, image_type, target_w_in, target_h_in, target_dpi=TARGET_DPI):
@@ -1584,12 +1624,7 @@ def foil_segment():
 
 @app.route('/generate', methods=['POST'])
 def generate_pdf():
-    """Accept upload, spawn background process, return job_id immediately.
-
-    Uses multiprocessing.Process instead of threading.Thread so that
-    CPU-intensive image work (PIL mask generation) runs in a separate
-    process with its own GIL, keeping Gunicorn workers responsive.
-    """
+    """Accept upload, spawn background thread, return job_id immediately."""
     try:
         form_data = dict(request.form)
         files_data = {}
@@ -1601,12 +1636,12 @@ def generate_pdf():
         job_id = str(uuid.uuid4())
         set_job(job_id, {'status': 'processing', 'created': time.time()})
 
-        proc = multiprocessing.Process(
+        t = threading.Thread(
             target=_run_generate_job,
             args=(job_id, form_data, files_data),
             daemon=True,
         )
-        proc.start()
+        t.start()
 
         cleanup_old_jobs()
         return jsonify({'job_id': job_id})
@@ -1644,11 +1679,7 @@ def job_download(job_id):
 
 
 def _run_generate_job(job_id, form_data, files_data):
-    """Background process: run PDF generation and store result.
-
-    Runs in a child process (separate GIL) so CPU-heavy PIL work
-    doesn't block Gunicorn workers from handling new requests.
-    """
+    """Background thread: run PDF generation and store result."""
     try:
         result = _process_generate(form_data, files_data)
         job = get_job(job_id) or {}
@@ -1681,6 +1712,7 @@ def _process_generate(form_data, files_data):
         image_type = fi['filename'].rsplit('.', 1)[1].lower()
         if image_type == 'jpg':
             image_type = 'jpeg'
+        image_data, image_type = downsize_for_embed(image_data, image_type)
     elif card_type != 'envelope':
         return {'status': 'error', 'error': 'No image file provided'}
 
@@ -1695,6 +1727,7 @@ def _process_generate(form_data, files_data):
                 back_type = fi['filename'].rsplit('.', 1)[1].lower()
                 if back_type == 'jpg':
                     back_type = 'jpeg'
+                back_data, back_type = downsize_for_embed(back_data, back_type)
                 additional_images['back'] = {'data': back_data, 'type': back_type}
 
         if card_type == 'folded' and 'inside_image' in files_data:
@@ -1704,6 +1737,7 @@ def _process_generate(form_data, files_data):
                 inside_type = fi['filename'].rsplit('.', 1)[1].lower()
                 if inside_type == 'jpg':
                     inside_type = 'jpeg'
+                inside_data, inside_type = downsize_for_embed(inside_data, inside_type)
                 additional_images['inside'] = {'data': inside_data, 'type': inside_type}
 
     icc_base64 = None
