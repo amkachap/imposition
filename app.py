@@ -832,11 +832,12 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
                 pink_back_html = generate_fluorescent_svg(back_mask, 'pink-mask-back', bm_w, bm_h, pos_full)
 
     # Foil spot color support (user-selected regions via SAM masks)
+    # Position foil INSIDE the image container so it aligns with object-fit artwork
     is_foil = settings.get('print_mode') == 'foil'
     foil_front_html = ''
     foil_back_html = ''
     if is_foil:
-        pos_full = f"top:-{bleed}in;left:-{bleed}in;width:{total_width}in;height:{total_height}in;"
+        pos_inside = "top:0;left:0;width:100%;height:100%;"
         foil_regions = settings.get('foil_regions', {})
         for foil_type, color_name in [('gold', 'GoldFoil'), ('silver', 'SilverFoil')]:
             front_key = f'front_{foil_type}'
@@ -845,13 +846,13 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
                 fw, fh = _get_mask_dimensions(foil_regions[front_key])
                 foil_front_html += generate_foil_svg(
                     foil_regions[front_key],
-                    f'{foil_type}-foil-mask-front', fw, fh, pos_full, color_name
+                    f'{foil_type}-foil-mask-front', fw, fh, pos_inside, color_name
                 )
             if foil_regions.get(back_key):
                 bw, bh = _get_mask_dimensions(foil_regions[back_key])
                 foil_back_html += generate_foil_svg(
                     foil_regions[back_key],
-                    f'{foil_type}-foil-mask-back', bw, bh, pos_full, color_name
+                    f'{foil_type}-foil-mask-back', bw, bh, pos_inside, color_name
                 )
 
     html = f"""<!DOCTYPE html>
@@ -929,9 +930,9 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         {silver_front_html}
         <div class="page-content">
             <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Card Front">
+            {foil_front_html}
         </div>
         {pink_front_html}
-        {foil_front_html}
     </div>
     
     <!-- Page 2: Back -->
@@ -939,11 +940,11 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         {silver_back_html}
         <div class="back-page-bg">
             {back_bg_content}
+            {foil_back_html}
         </div>
         {branding_bg_html}
         {branding_img_html}
         {pink_back_html}
-        {foil_back_html}
     </div>
 </body>
 </html>"""
