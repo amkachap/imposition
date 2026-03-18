@@ -423,11 +423,12 @@ def generate_fluorescent_svg(mask_base64, mask_id, vb_w, vb_h, css_pos):
     )
 
 
-def generate_foil_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, foil_color_name):
+def generate_foil_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, foil_color_name, preserve_aspect='none'):
     """Build an inline SVG for a foil spot-color layer (no overprint — foil
-    is opaque and knocks out the CMYK underneath)."""
+    is opaque and knocks out the CMYK underneath).
+    preserve_aspect must match image object-fit: 'none'=fill, 'xMidYMid meet'=contain, 'xMidYMid slice'=cover."""
     return (
-        f'<svg viewBox="0 0 {vb_w} {vb_h}"'
+        f'<svg viewBox="0 0 {vb_w} {vb_h}" preserveAspectRatio="{preserve_aspect}"'
         f' xmlns="http://www.w3.org/2000/svg"'
         f' xmlns:xlink="http://www.w3.org/1999/xlink"'
         f' style="position:absolute;z-index:2;pointer-events:none;{css_pos}">'
@@ -832,11 +833,14 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
                 pink_back_html = generate_fluorescent_svg(back_mask, 'pink-mask-back', bm_w, bm_h, pos_full)
 
     # Foil spot color support (user-selected regions via SAM masks)
-    # Position foil INSIDE the image container so it aligns with object-fit artwork
+    # Position foil INSIDE the image container so it aligns with object-fit artwork.
+    # preserveAspectRatio must match image object-fit for correct alignment.
     is_foil = settings.get('print_mode') == 'foil'
     foil_front_html = ''
     foil_back_html = ''
     if is_foil:
+        fit_to_preserve = {'fill': 'none', 'contain': 'xMidYMid meet', 'cover': 'xMidYMid slice'}
+        preserve_aspect = fit_to_preserve.get(fit_mode, 'none')
         pos_inside = "top:0;left:0;width:100%;height:100%;"
         foil_regions = settings.get('foil_regions', {})
         for foil_type, color_name in [('gold', 'GoldFoil'), ('silver', 'SilverFoil')]:
@@ -846,13 +850,13 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
                 fw, fh = _get_mask_dimensions(foil_regions[front_key])
                 foil_front_html += generate_foil_svg(
                     foil_regions[front_key],
-                    f'{foil_type}-foil-mask-front', fw, fh, pos_inside, color_name
+                    f'{foil_type}-foil-mask-front', fw, fh, pos_inside, color_name, preserve_aspect
                 )
             if foil_regions.get(back_key):
                 bw, bh = _get_mask_dimensions(foil_regions[back_key])
                 foil_back_html += generate_foil_svg(
                     foil_regions[back_key],
-                    f'{foil_type}-foil-mask-back', bw, bh, pos_inside, color_name
+                    f'{foil_type}-foil-mask-back', bw, bh, pos_inside, color_name, preserve_aspect
                 )
 
     html = f"""<!DOCTYPE html>
