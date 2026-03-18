@@ -19,6 +19,7 @@ import docraptor
 from PIL import Image, ImageChops, ImageFilter
 from collections import Counter
 import numpy as np
+import cv2
 
 # SAM (Segment Anything Model) — lazy-loaded on first use
 _sam_predictor = None
@@ -463,10 +464,11 @@ def generate_fluorescent_svg(mask_base64, mask_id, vb_w, vb_h, css_pos):
     )
 
 
-def generate_foil_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, foil_color_name, preserve_aspect='none'):
-    """Build an inline SVG for a foil spot-color layer (no overprint — foil
-    is opaque and knocks out the CMYK underneath).
+def generate_scodix_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, overprint=True, preserve_aspect='none'):
+    """Build an inline SVG for a SCODIX spot-color layer.
+    overprint=True for foil over artwork, False for knockout (foil replaces area).
     preserve_aspect must match image object-fit: 'none'=fill, 'xMidYMid meet'=contain, 'xMidYMid slice'=cover."""
+    fill = 'prince-color(SCODIX, overprint)' if overprint else 'prince-color(SCODIX)'
     return (
         f'<svg viewBox="0 0 {vb_w} {vb_h}" preserveAspectRatio="{preserve_aspect}"'
         f' xmlns="http://www.w3.org/2000/svg"'
@@ -477,7 +479,7 @@ def generate_foil_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, foil_color_name
         f' width="{vb_w}" height="{vb_h}" preserveAspectRatio="none"/>'
         f'</mask></defs>'
         f'<rect width="{vb_w}" height="{vb_h}"'
-        f' style="fill:prince-color({foil_color_name});"'
+        f' style="fill:{fill};"'
         f' mask="url(#{mask_id})"/>'
         f'</svg>'
     )
@@ -502,6 +504,49 @@ def _sanitize_mask(mask_b64):
     buf = BytesIO()
     out.save(buf, format='PNG')
     return base64.b64encode(buf.getvalue()).decode('ascii')
+
+
+def inpaint_knockout_region(image_b64, image_type, mask_b64):
+    """Remove masked region from artwork via OpenCV inpainting.
+
+    Used for Mode B (knockout) foil: text/logos are erased from the CMYK
+    layer so they exist only on the SCODIX spot channel.
+    Returns (new_image_b64, new_image_type).
+    """
+    try:
+        img_bytes = base64.b64decode(image_b64)
+        img_arr = np.array(Image.open(BytesIO(img_bytes)).convert('RGB'))
+        artwork = cv2.cvtColor(img_arr, cv2.COLOR_RGB2BGR)
+
+        mask_arr = np.array(
+            Image.open(BytesIO(base64.b64decode(mask_b64))).convert('L')
+        )
+        if mask_arr.shape[:2] != artwork.shape[:2]:
+            mask_arr = cv2.resize(mask_arr, (artwork.shape[1], artwork.shape[0]),
+                                  interpolation=cv2.INTER_NEAREST)
+
+        _, binary_mask = cv2.threshold(mask_arr, 127, 255, cv2.THRESH_BINARY)
+
+        dilate_kernel = np.ones((5, 5), np.uint8)
+        dilated = cv2.dilate(binary_mask, dilate_kernel, iterations=2)
+
+        result = cv2.inpaint(artwork, dilated, inpaintRadius=10, flags=cv2.INPAINT_TELEA)
+
+        result_rgb = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+        out = Image.fromarray(result_rgb)
+        buf = BytesIO()
+        out.save(buf, format='JPEG', quality=92)
+        return base64.b64encode(buf.getvalue()).decode('utf-8'), 'jpeg'
+    except Exception as e:
+        print(f"Inpainting failed, falling back to white fill: {e}")
+        img = Image.open(BytesIO(base64.b64decode(image_b64))).convert('RGB')
+        mask = Image.open(BytesIO(base64.b64decode(mask_b64))).convert('L').resize(img.size, Image.NEAREST)
+        arr = np.array(img)
+        arr[np.array(mask) > 127] = (255, 255, 255)
+        out = Image.fromarray(arr)
+        buf = BytesIO()
+        out.save(buf, format='JPEG', quality=92)
+        return base64.b64encode(buf.getvalue()).decode('utf-8'), 'jpeg'
 
 
 # PDF profiles available in DocRaptor/Prince
@@ -593,23 +638,16 @@ def get_spot_color_css(settings):
         }
         """
     if print_mode == 'foil':
-        css = ''
         foil_regions = settings.get('foil_regions', {})
-        has_gold = bool(foil_regions.get('front_gold') or foil_regions.get('back_gold'))
-        has_silver = bool(foil_regions.get('front_silver') or foil_regions.get('back_silver'))
-        if has_gold:
-            css += """
-        @prince-color GoldFoil {
+        has_any = any(foil_regions.get(k) for k in
+                      ('front_overprint', 'front_knockout', 'back_overprint', 'back_knockout'))
+        if has_any:
+            return """
+        @prince-color SCODIX {
             alternate-color: cmyk(0, 0.18, 0.75, 0.18);
         }
             """
-        if has_silver:
-            css += """
-        @prince-color SilverFoil {
-            alternate-color: cmyk(0, 0, 0, 0.3);
-        }
-            """
-        return css
+        return ''
     return ''
 
 
@@ -872,9 +910,9 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
             if back_mask:
                 pink_back_html = generate_fluorescent_svg(back_mask, 'pink-mask-back', bm_w, bm_h, pos_full)
 
-    # Foil spot color support (user-selected regions via SAM masks)
-    # Position foil INSIDE the image container so it aligns with object-fit artwork.
-    # preserveAspectRatio must match image object-fit for correct alignment.
+    # SCODIX foil spot color support (user-selected regions via SAM masks)
+    # Two modes: overprint (foil over artwork) and knockout (foil replaces area).
+    # Knockout regions are inpainted out of the CMYK artwork.
     is_foil = settings.get('print_mode') == 'foil'
     foil_front_html = ''
     foil_back_html = ''
@@ -883,20 +921,29 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         preserve_aspect = fit_to_preserve.get(fit_mode, 'none')
         pos_inside = "top:0;left:0;width:100%;height:100%;"
         foil_regions = settings.get('foil_regions', {})
-        for foil_type, color_name in [('gold', 'GoldFoil'), ('silver', 'SilverFoil')]:
-            front_key = f'front_{foil_type}'
-            back_key = f'back_{foil_type}'
+
+        # Inpaint knockout regions out of the CMYK artwork
+        if foil_regions.get('front_knockout') and image_data:
+            image_data, image_type = inpaint_knockout_region(
+                image_data, image_type, foil_regions['front_knockout'])
+        if foil_regions.get('back_knockout') and back_image_data:
+            back_image_data, back_image_type = inpaint_knockout_region(
+                back_image_data, back_image_type, foil_regions['back_knockout'])
+
+        for mode, overprint in [('overprint', True), ('knockout', False)]:
+            front_key = f'front_{mode}'
+            back_key = f'back_{mode}'
             if foil_regions.get(front_key):
                 fw, fh = _get_mask_dimensions(foil_regions[front_key])
-                foil_front_html += generate_foil_svg(
+                foil_front_html += generate_scodix_svg(
                     foil_regions[front_key],
-                    f'{foil_type}-foil-mask-front', fw, fh, pos_inside, color_name, preserve_aspect
+                    f'scodix-{mode}-front', fw, fh, pos_inside, overprint, preserve_aspect
                 )
             if foil_regions.get(back_key):
                 bw, bh = _get_mask_dimensions(foil_regions[back_key])
-                foil_back_html += generate_foil_svg(
+                foil_back_html += generate_scodix_svg(
                     foil_regions[back_key],
-                    f'{foil_type}-foil-mask-back', bw, bh, pos_inside, color_name, preserve_aspect
+                    f'scodix-{mode}-back', bw, bh, pos_inside, overprint, preserve_aspect
                 )
 
     html = f"""<!DOCTYPE html>
@@ -1784,10 +1831,10 @@ def _process_generate(form_data, files_data):
         'test_mode': form_data.get('test_mode') == 'true',
     }
 
-    # Foil masks — base64 PNGs sent from the frontend foil selection UI
+    # Foil masks — base64 PNGs, separated by mode (overprint vs knockout)
     if print_mode == 'foil':
         foil_regions = {}
-        for key in ('front_gold', 'front_silver', 'back_gold', 'back_silver'):
+        for key in ('front_overprint', 'front_knockout', 'back_overprint', 'back_knockout'):
             val = form_data.get(f'foil_{key}', '').strip()
             if val:
                 foil_regions[key] = _sanitize_mask(val)

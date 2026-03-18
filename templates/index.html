@@ -1220,11 +1220,15 @@ SOMEWHERE, ST 67890</textarea>
             <p id="foilStatusText" style="font-size:12px;color:var(--text-muted);margin-top:6px;min-height:16px;"></p>
             <div id="foilConfirmBar" style="display:none; gap:10px; justify-content:center; align-items:center; margin:10px 0; padding:10px; background:var(--bg-primary); border-radius:var(--radius); border:1px solid var(--border);">
                 <span style="font-size:13px;font-weight:500;">Apply foil to this region?</span>
+                <select id="foilRegionMode" style="padding:5px 8px;border-radius:4px;border:1px solid var(--border);font-size:12px;">
+                    <option value="over_artwork">Over Artwork (overprint)</option>
+                    <option value="replaces_area">Replaces Area (knockout)</option>
+                </select>
                 <button id="foilConfirmYes" type="button" style="background:#22c55e;color:#fff;padding:7px 20px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;">Confirm</button>
                 <button id="foilConfirmNo" type="button" style="background:#ef4444;color:#fff;padding:7px 20px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;">Reject</button>
             </div>
             <div class="foil-toolbar">
-                <label>Mode:</label>
+                <label>Click mode:</label>
                 <div style="display:flex;gap:6px;">
                     <button id="foilModeSelect" type="button" class="foil-mode-btn active" data-mode="select">Select</button>
                     <button id="foilModeExclude" type="button" class="foil-mode-btn" data-mode="exclude">Exclude</button>
@@ -1791,12 +1795,12 @@ SOMEWHERE, ST 67890</textarea>
             formData.append('test_mode', document.getElementById('test_mode').checked);
             formData.append('provide_all_images', provideAllImages.checked);
 
-            // Foil composite masks
+            // Foil composite masks (separated by mode: overprint vs knockout)
             if (printMode.value === 'foil') {
-                if (foilState.compositeFrontGold) formData.append('foil_front_gold', foilState.compositeFrontGold);
-                if (foilState.compositeFrontSilver) formData.append('foil_front_silver', foilState.compositeFrontSilver);
-                if (foilState.compositeBackGold) formData.append('foil_back_gold', foilState.compositeBackGold);
-                if (foilState.compositeBackSilver) formData.append('foil_back_silver', foilState.compositeBackSilver);
+                if (foilState.compositeFrontOverprint) formData.append('foil_front_overprint', foilState.compositeFrontOverprint);
+                if (foilState.compositeFrontKnockout) formData.append('foil_front_knockout', foilState.compositeFrontKnockout);
+                if (foilState.compositeBackOverprint) formData.append('foil_back_overprint', foilState.compositeBackOverprint);
+                if (foilState.compositeBackKnockout) formData.append('foil_back_knockout', foilState.compositeBackKnockout);
             }
 
             if (cardType.value === 'envelope') {
@@ -2067,12 +2071,12 @@ SOMEWHERE, ST 67890</textarea>
 
         // ---- Foil selection system ----
         const foilState = {
-            front: [],  // [{id, maskB64, foilType, x, y}, ...]
+            front: [],  // [{id, points, maskB64, foilType, mode}, ...]
             back: [],
-            compositeFrontGold: '',
-            compositeFrontSilver: '',
-            compositeBackGold: '',
-            compositeBackSilver: '',
+            compositeFrontOverprint: '',
+            compositeFrontKnockout: '',
+            compositeBackOverprint: '',
+            compositeBackKnockout: '',
         };
         let foilActivePanel = 'front';
         let foilImageId = '';
@@ -2106,14 +2110,14 @@ SOMEWHERE, ST 67890</textarea>
         imageInput.addEventListener('change', () => {
             updateFoilButtonVisibility();
             foilState.front = [];
-            foilState.compositeFrontGold = '';
-            foilState.compositeFrontSilver = '';
+            foilState.compositeFrontOverprint = '';
+            foilState.compositeFrontKnockout = '';
         });
         backImageInput.addEventListener('change', () => {
             updateFoilButtonVisibility();
             foilState.back = [];
-            foilState.compositeBackGold = '';
-            foilState.compositeBackSilver = '';
+            foilState.compositeBackOverprint = '';
+            foilState.compositeBackKnockout = '';
         });
 
         function resizeImageForSAM(dataUrl, maxDim) {
@@ -2368,9 +2372,10 @@ SOMEWHERE, ST 67890</textarea>
 
         function renderFoilChips() {
             const regions = foilState[foilActivePanel];
+            const modeLabel = m => m === 'replaces_area' ? 'knockout' : 'overprint';
             foilRegionList.innerHTML = regions.map((r, i) =>
                 `<span class="foil-region-chip ${r.foilType}">
-                    Region ${i + 1} (${r.foilType})
+                    Region ${i + 1} (${r.foilType}, ${modeLabel(r.mode)})
                     <button data-idx="${i}">&times;</button>
                 </span>`
             ).join('');
@@ -2386,6 +2391,7 @@ SOMEWHERE, ST 67890</textarea>
 
         document.getElementById('foilConfirmYes').addEventListener('click', () => {
             if (!foilPendingRegion) return;
+            foilPendingRegion.mode = document.getElementById('foilRegionMode').value;
             foilState[foilActivePanel].push(foilPendingRegion);
             foilPendingRegion = null;
             document.getElementById('foilConfirmBar').style.display = 'none';
@@ -2423,11 +2429,13 @@ SOMEWHERE, ST 67890</textarea>
 
         function compositeFoilMasks(panel) {
             const regions = foilState[panel];
-            const types = ['gold', 'silver'];
-            const promises = types.map(type => {
-                const matching = regions.filter(r => r.foilType === type);
+            const modes = ['overprint', 'knockout'];
+            const modeFilter = {'overprint': 'over_artwork', 'knockout': 'replaces_area'};
+            const promises = modes.map(mode => {
+                const matching = regions.filter(r => r.mode === modeFilter[mode]);
+                const stateKey = `composite${cap(panel)}${cap(mode)}`;
                 if (matching.length === 0) {
-                    foilState[`composite${cap(panel)}${cap(type)}`] = '';
+                    foilState[stateKey] = '';
                     return Promise.resolve();
                 }
                 return new Promise((resolve) => {
@@ -2448,9 +2456,8 @@ SOMEWHERE, ST 67890</textarea>
                             }
                             loaded++;
                             if (loaded === matching.length) {
-                                const dataUrl = canvas.toDataURL('image/png');
-                                const b64 = dataUrl.split(',')[1];
-                                foilState[`composite${cap(panel)}${cap(type)}`] = b64;
+                                const b64 = canvas.toDataURL('image/png').split(',')[1];
+                                foilState[stateKey] = b64;
                                 resolve();
                             }
                         };
