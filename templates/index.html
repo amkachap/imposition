@@ -1797,6 +1797,12 @@ SOMEWHERE, ST 67890</textarea>
 
             // Foil composite masks (separated by mode: overprint vs knockout)
             if (printMode.value === 'foil') {
+                console.log('[foil] Submitting composites:', {
+                    frontOverprint: foilState.compositeFrontOverprint ? foilState.compositeFrontOverprint.length + ' chars' : 'empty',
+                    frontKnockout: foilState.compositeFrontKnockout ? foilState.compositeFrontKnockout.length + ' chars' : 'empty',
+                    backOverprint: foilState.compositeBackOverprint ? foilState.compositeBackOverprint.length + ' chars' : 'empty',
+                    backKnockout: foilState.compositeBackKnockout ? foilState.compositeBackKnockout.length + ' chars' : 'empty',
+                });
                 if (foilState.compositeFrontOverprint) formData.append('foil_front_overprint', foilState.compositeFrontOverprint);
                 if (foilState.compositeFrontKnockout) formData.append('foil_front_knockout', foilState.compositeFrontKnockout);
                 if (foilState.compositeBackOverprint) formData.append('foil_back_overprint', foilState.compositeBackOverprint);
@@ -2221,7 +2227,7 @@ SOMEWHERE, ST 67890</textarea>
 
             const points = foilPendingRegion ? [...foilPendingRegion.points, {x, y, label}] : [{x, y, label}];
             if (!foilPendingRegion) {
-                foilPendingRegion = { id: crypto.randomUUID(), points: [], maskB64: '', foilType: foilTypeSelect.value };
+                foilPendingRegion = { id: crypto.randomUUID(), points: [], maskB64: '', foilType: foilTypeSelect.value, mode: 'over_artwork' };
             }
             foilPendingRegion.points = points;
             foilPendingRegion.foilType = foilTypeSelect.value;
@@ -2422,8 +2428,16 @@ SOMEWHERE, ST 67890</textarea>
         });
 
         document.getElementById('foilApplyBtn').addEventListener('click', async () => {
+            const regions = foilState[foilActivePanel];
+            console.log(`[foil] Apply: ${regions.length} region(s) on ${foilActivePanel}`, regions.map(r => ({mode: r.mode, foilType: r.foilType, hasMask: !!r.maskB64})));
             document.getElementById('foilStatusText').textContent = 'Compositing masks…';
             await compositeFoilMasks(foilActivePanel);
+            console.log(`[foil] Composites:`, {
+                frontOverprint: !!foilState.compositeFrontOverprint,
+                frontKnockout: !!foilState.compositeFrontKnockout,
+                backOverprint: !!foilState.compositeBackOverprint,
+                backKnockout: !!foilState.compositeBackKnockout,
+            });
             foilModal.style.display = 'none';
         });
 
@@ -2432,7 +2446,10 @@ SOMEWHERE, ST 67890</textarea>
             const modes = ['overprint', 'knockout'];
             const modeFilter = {'overprint': 'over_artwork', 'knockout': 'replaces_area'};
             const promises = modes.map(mode => {
-                const matching = regions.filter(r => r.mode === modeFilter[mode]);
+                const matching = regions.filter(r => {
+                    const regionMode = r.mode || 'over_artwork';
+                    return regionMode === modeFilter[mode];
+                });
                 const stateKey = `composite${cap(panel)}${cap(mode)}`;
                 if (matching.length === 0) {
                     foilState[stateKey] = '';

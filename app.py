@@ -1838,7 +1838,11 @@ def _process_generate(form_data, files_data):
             val = form_data.get(f'foil_{key}', '').strip()
             if val:
                 foil_regions[key] = _sanitize_mask(val)
+                print(f"[foil] Received {key}: {len(val)} chars")
+            else:
+                print(f"[foil] No data for {key}")
         settings['foil_regions'] = foil_regions
+        print(f"[foil] Total regions with data: {len(foil_regions)}")
 
     if card_type == 'envelope':
         settings['envelope'] = {
