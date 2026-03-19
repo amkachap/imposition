@@ -1705,6 +1705,62 @@ def foil_segment():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/foil/color-select', methods=['POST'])
+def foil_color_select():
+    """Select pixels by color similarity (magic-wand style).
+    Uses LAB color space for perceptual distance.
+    Accepts: imageId, x, y, tolerance (0-100, default 32).
+    Returns: binary mask PNG (base64)."""
+    data = request.get_json(silent=True) or {}
+    image_id = data.get('imageId', '')
+    x = data.get('x')
+    y = data.get('y')
+    tolerance = int(data.get('tolerance', 32))
+
+    if not image_id or x is None or y is None:
+        return jsonify({'error': 'imageId, x, y are required'}), 400
+
+    x, y = int(x), int(y)
+    tolerance = max(1, min(100, tolerance))
+
+    try:
+        cached = _sam_cache_read(image_id)
+        if cached is None:
+            return jsonify({'error': 'Image not set. Call /api/foil/set-image first.'}), 400
+        img_bytes, width, height = cached
+
+        img = Image.open(BytesIO(img_bytes)).convert('RGB')
+        img_arr = np.array(img)
+
+        x = min(max(x, 0), width - 1)
+        y = min(max(y, 0), height - 1)
+
+        img_lab = cv2.cvtColor(img_arr, cv2.COLOR_RGB2LAB).astype(np.float32)
+        target = img_lab[y, x]
+
+        diff = np.sqrt(np.sum((img_lab - target) ** 2, axis=2))
+
+        mask = np.where(diff <= tolerance, 255, 0).astype(np.uint8)
+
+        kernel = np.ones((3, 3), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        mask_img = Image.fromarray(mask, mode='L')
+        buf = BytesIO()
+        mask_img.save(buf, format='PNG')
+        mask_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+
+        return jsonify({
+            'mask': mask_b64,
+            'width': width,
+            'height': height,
+        })
+    except Exception as e:
+        log_error('/api/foil/color-select', e)
+        return jsonify({'error': str(e)}), 500
+
+
 # ---------- PDF generation ----------
 
 @app.route('/generate', methods=['POST'])

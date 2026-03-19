@@ -1211,7 +1211,7 @@ SOMEWHERE, ST 67890</textarea>
                 <h3 style="margin:0;" id="foilModalTitle">Select Foil Regions — Front</h3>
                 <button class="btn btn-secondary" id="foilCancelBtn" type="button" style="padding:8px 16px;">Cancel</button>
             </div>
-            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Click to select regions for foil. Use Exclude mode (or hold Shift) to cut out areas like text. Add points, then Confirm when done.</p>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;"><b>Object</b> selects shapes (multi-point, use Exclude to refine). <b>Color</b> selects by color similarity — adjust tolerance to control range.</p>
             <div class="foil-canvas-wrap" id="foilCanvasWrap">
                 <img id="foilImg" alt="Panel">
                 <canvas id="foilOverlayCanvas"></canvas>
@@ -1228,12 +1228,22 @@ SOMEWHERE, ST 67890</textarea>
                 <button id="foilConfirmNo" type="button" style="background:#ef4444;color:#fff;padding:7px 20px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;">Reject</button>
             </div>
             <div class="foil-toolbar">
+                <label>Selection tool:</label>
+                <div style="display:flex;gap:6px;">
+                    <button id="foilToolObject" type="button" class="foil-mode-btn active" data-tool="object">Object</button>
+                    <button id="foilToolColor" type="button" class="foil-mode-btn" data-tool="color">Color</button>
+                </div>
                 <label>Click mode:</label>
                 <div style="display:flex;gap:6px;">
                     <button id="foilModeSelect" type="button" class="foil-mode-btn active" data-mode="select">Select</button>
                     <button id="foilModeExclude" type="button" class="foil-mode-btn" data-mode="exclude">Exclude</button>
                 </div>
                 <span style="font-size:11px;color:var(--text-muted);">(hold Shift to exclude)</span>
+            </div>
+            <div class="foil-toolbar" id="foilToleranceRow">
+                <label for="foilTolerance">Tolerance:</label>
+                <input type="range" id="foilTolerance" min="1" max="100" value="32" style="width:140px;">
+                <span id="foilToleranceVal" style="font-size:12px;min-width:24px;">32</span>
                 <label style="margin-left:12px;">Foil type:</label>
                 <select id="foilTypeSelect">
                     <option value="gold">Gold</option>
@@ -2090,6 +2100,7 @@ SOMEWHERE, ST 67890</textarea>
         let foilEmbeddingReady = false;
         let foilPendingRegion = null;
         let foilClickMode = 'select';
+        let foilSelectionTool = 'object'; // 'object' (SAM) or 'color' (magic wand)
 
         const foilModal = document.getElementById('foilModal');
         const foilImg = document.getElementById('foilImg');
@@ -2159,9 +2170,13 @@ SOMEWHERE, ST 67890</textarea>
             foilEmbeddingReady = false;
             foilPendingRegion = null;
             foilClickMode = 'select';
+            foilSelectionTool = 'object';
             document.getElementById('foilConfirmBar').style.display = 'none';
-            document.querySelectorAll('.foil-mode-btn').forEach(b => {
+            document.querySelectorAll('.foil-mode-btn[data-mode]').forEach(b => {
                 b.classList.toggle('active', b.dataset.mode === 'select');
+            });
+            document.querySelectorAll('.foil-mode-btn[data-tool]').forEach(b => {
+                b.classList.toggle('active', b.dataset.tool === 'object');
             });
 
             const reader = new FileReader();
@@ -2192,8 +2207,7 @@ SOMEWHERE, ST 67890</textarea>
                         foilEmbeddingReady = true;
                         foilStatus.textContent = 'Ready — click regions to select foil areas.';
                     } else {
-                        foilStatus.textContent = '';
-                        alert('SAM error: ' + (d.error || 'unknown'));
+                        foilStatus.textContent = 'Color tool ready. Object tool unavailable: ' + (d.error || 'unknown');
                     }
                 } catch (err) {
                     foilStatus.textContent = '';
@@ -2208,16 +2222,30 @@ SOMEWHERE, ST 67890</textarea>
         foilFrontBtn.addEventListener('click', (e) => { e.stopPropagation(); openFoilModal('front'); });
         foilBackBtn.addEventListener('click', (e) => { e.stopPropagation(); openFoilModal('back'); });
 
-        document.querySelectorAll('.foil-mode-btn').forEach(btn => {
+        document.querySelectorAll('.foil-mode-btn[data-mode]').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.foil-mode-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.foil-mode-btn[data-mode]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 foilClickMode = btn.dataset.mode;
             });
         });
 
+        document.querySelectorAll('.foil-mode-btn[data-tool]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.foil-mode-btn[data-tool]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                foilSelectionTool = btn.dataset.tool;
+            });
+        });
+
+        const foilToleranceSlider = document.getElementById('foilTolerance');
+        const foilToleranceVal = document.getElementById('foilToleranceVal');
+        foilToleranceSlider.addEventListener('input', () => {
+            foilToleranceVal.textContent = foilToleranceSlider.value;
+        });
+
         document.getElementById('foilCanvasWrap').addEventListener('click', async (e) => {
-            if (!foilEmbeddingReady || foilSpinner.style.display === 'flex') return;
+            if (foilSpinner.style.display === 'flex') return;
             const rect = foilImg.getBoundingClientRect();
             const scaleX = foilOrigW / rect.width;
             const scaleY = foilOrigH / rect.height;
@@ -2225,36 +2253,68 @@ SOMEWHERE, ST 67890</textarea>
             const y = Math.round((e.clientY - rect.top) * scaleY);
             const label = (foilClickMode === 'exclude' || e.shiftKey) ? 0 : 1;
 
-            const points = foilPendingRegion ? [...foilPendingRegion.points, {x, y, label}] : [{x, y, label}];
             if (!foilPendingRegion) {
                 foilPendingRegion = { id: crypto.randomUUID(), points: [], maskB64: '', foilType: foilTypeSelect.value, mode: 'over_artwork' };
             }
-            foilPendingRegion.points = points;
             foilPendingRegion.foilType = foilTypeSelect.value;
 
             foilSpinner.style.display = 'flex';
-            document.getElementById('foilStatusText').textContent = 'Segmenting…';
-            try {
-                const resp = await fetch('/api/foil/segment', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        imageId: foilImageId,
-                        points: points.map(p => [p.x, p.y]),
-                        labels: points.map(p => p.label),
-                    }),
-                });
-                const d = await resp.json();
-                if (d.error) { alert(d.error); foilSpinner.style.display = 'none'; return; }
 
-                foilPendingRegion.maskB64 = d.mask;
-                drawPendingOutline(foilPendingRegion);
-                document.getElementById('foilConfirmBar').style.display = 'flex';
-                document.getElementById('foilStatusText').textContent =
-                    points.length > 1 ? `Region refined — add more points or Confirm.` : 'Region detected — add exclude points or Confirm.';
-            } catch (err) {
-                alert('Segment error: ' + err.message);
-                document.getElementById('foilStatusText').textContent = '';
+            if (foilSelectionTool === 'color') {
+                // Color (magic wand) mode — each click is a fresh color sample
+                foilPendingRegion.points = [{x, y, label: 1}];
+                document.getElementById('foilStatusText').textContent = 'Selecting by color…';
+                try {
+                    const resp = await fetch('/api/foil/color-select', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            imageId: foilImageId,
+                            x, y,
+                            tolerance: parseInt(foilToleranceSlider.value),
+                        }),
+                    });
+                    const d = await resp.json();
+                    if (d.error) { alert(d.error); foilSpinner.style.display = 'none'; return; }
+
+                    foilPendingRegion.maskB64 = d.mask;
+                    drawPendingOutline(foilPendingRegion);
+                    document.getElementById('foilConfirmBar').style.display = 'flex';
+                    document.getElementById('foilStatusText').textContent =
+                        `Color selected (tolerance ${foilToleranceSlider.value}) — adjust tolerance and re-click, or Confirm.`;
+                } catch (err) {
+                    alert('Color select error: ' + err.message);
+                    document.getElementById('foilStatusText').textContent = '';
+                }
+            } else {
+                // Object (SAM) mode — multi-point prompting
+                if (!foilEmbeddingReady) { foilSpinner.style.display = 'none'; return; }
+                const points = [...foilPendingRegion.points, {x, y, label}];
+                foilPendingRegion.points = points;
+
+                document.getElementById('foilStatusText').textContent = 'Segmenting…';
+                try {
+                    const resp = await fetch('/api/foil/segment', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            imageId: foilImageId,
+                            points: points.map(p => [p.x, p.y]),
+                            labels: points.map(p => p.label),
+                        }),
+                    });
+                    const d = await resp.json();
+                    if (d.error) { alert(d.error); foilSpinner.style.display = 'none'; return; }
+
+                    foilPendingRegion.maskB64 = d.mask;
+                    drawPendingOutline(foilPendingRegion);
+                    document.getElementById('foilConfirmBar').style.display = 'flex';
+                    document.getElementById('foilStatusText').textContent =
+                        points.length > 1 ? 'Region refined — add more points or Confirm.' : 'Region detected — add exclude points or Confirm.';
+                } catch (err) {
+                    alert('Segment error: ' + err.message);
+                    document.getElementById('foilStatusText').textContent = '';
+                }
             }
             foilSpinner.style.display = 'none';
         });
