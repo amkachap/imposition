@@ -464,16 +464,17 @@ def generate_fluorescent_svg(mask_base64, mask_id, vb_w, vb_h, css_pos):
     )
 
 
-def generate_scodix_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, overprint=True, preserve_aspect='none'):
+def generate_scodix_svg(mask_base64, mask_id, vb_w, vb_h, css_pos, overprint=True):
     """Build an inline SVG for a SCODIX spot-color layer.
     overprint=True for foil over artwork, False for knockout (foil replaces area).
-    preserve_aspect must match image object-fit: 'none'=fill, 'xMidYMid meet'=contain, 'xMidYMid slice'=cover."""
-    fill = 'prince-color(SCODIX, overprint)' if overprint else 'prince-color(SCODIX)'
+    Mirrors generate_fluorescent_svg structure exactly — proven to produce
+    /Separation color spaces in Prince 15.1 PDF output."""
+    fill = 'prince-color(SCODIX,overprint)' if overprint else 'prince-color(SCODIX)'
     return (
-        f'<svg viewBox="0 0 {vb_w} {vb_h}" preserveAspectRatio="{preserve_aspect}"'
+        f'<svg viewBox="0 0 {vb_w} {vb_h}"'
         f' xmlns="http://www.w3.org/2000/svg"'
         f' xmlns:xlink="http://www.w3.org/1999/xlink"'
-        f' style="position:absolute;z-index:2;pointer-events:none;{css_pos}">'
+        f' style="position:absolute;z-index:1;pointer-events:none;{css_pos}">'
         f'<defs><mask id="{mask_id}">'
         f'<image href="data:image/png;base64,{mask_base64}"'
         f' width="{vb_w}" height="{vb_h}" preserveAspectRatio="none"/>'
@@ -913,13 +914,14 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
     # SCODIX foil spot color support (user-selected regions via SAM masks)
     # Two modes: overprint (foil over artwork) and knockout (foil replaces area).
     # Knockout regions are inpainted out of the CMYK artwork.
+    # SVG is positioned as a sibling of .page-content with absolute inch-based
+    # dimensions — same approach as fluorescent pink, which is proven to produce
+    # /Separation color spaces in Prince's PDF output.
     is_foil = settings.get('print_mode') == 'foil'
     foil_front_html = ''
     foil_back_html = ''
     if is_foil:
-        fit_to_preserve = {'fill': 'none', 'contain': 'xMidYMid meet', 'cover': 'xMidYMid slice'}
-        preserve_aspect = fit_to_preserve.get(fit_mode, 'none')
-        pos_inside = "top:0;left:0;width:100%;height:100%;"
+        pos_full = f"top:-{bleed}in;left:-{bleed}in;width:{total_width}in;height:{total_height}in;"
         foil_regions = settings.get('foil_regions', {})
 
         # Inpaint knockout regions out of the CMYK artwork
@@ -937,13 +939,13 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
                 fw, fh = _get_mask_dimensions(foil_regions[front_key])
                 foil_front_html += generate_scodix_svg(
                     foil_regions[front_key],
-                    f'scodix-{mode}-front', fw, fh, pos_inside, overprint, preserve_aspect
+                    f'scodix-{mode}-front', fw, fh, pos_full, overprint
                 )
             if foil_regions.get(back_key):
                 bw, bh = _get_mask_dimensions(foil_regions[back_key])
                 foil_back_html += generate_scodix_svg(
                     foil_regions[back_key],
-                    f'scodix-{mode}-back', bw, bh, pos_inside, overprint, preserve_aspect
+                    f'scodix-{mode}-back', bw, bh, pos_full, overprint
                 )
 
     html = f"""<!DOCTYPE html>
@@ -1021,9 +1023,9 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         {silver_front_html}
         <div class="page-content">
             <img class="image" src="data:image/{image_type};base64,{image_data}" alt="Card Front">
-            {foil_front_html}
         </div>
         {pink_front_html}
+        {foil_front_html}
     </div>
     
     <!-- Page 2: Back -->
@@ -1031,11 +1033,11 @@ def generate_flat_card_html(image_data, image_type, settings, back_image_data=No
         {silver_back_html}
         <div class="back-page-bg">
             {back_bg_content}
-            {foil_back_html}
         </div>
         {branding_bg_html}
         {branding_img_html}
         {pink_back_html}
+        {foil_back_html}
     </div>
 </body>
 </html>"""
