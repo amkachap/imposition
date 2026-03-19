@@ -1744,7 +1744,7 @@ def foil_color_select():
         hi_diff = (tolerance, tolerance, tolerance)
         cv2.floodFill(
             img_lab, flood_mask, (x, y), 255,
-            loDiff=lo_diff, hiDiff=hi_diff,
+            lo_diff, hi_diff,
             flags=cv2.FLOODFILL_MASK_ONLY | (255 << 8),
         )
         mask = flood_mask[1:-1, 1:-1]
