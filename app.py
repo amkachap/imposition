@@ -1735,15 +1735,21 @@ def foil_color_select():
         x = min(max(x, 0), width - 1)
         y = min(max(y, 0), height - 1)
 
-        img_lab = cv2.cvtColor(img_arr, cv2.COLOR_RGB2LAB).astype(np.float32)
-        target = img_lab[y, x]
+        img_lab = cv2.cvtColor(img_arr, cv2.COLOR_RGB2LAB)
 
-        diff = np.sqrt(np.sum((img_lab - target) ** 2, axis=2))
-
-        mask = np.where(diff <= tolerance, 255, 0).astype(np.uint8)
+        # Contiguous flood-fill from the click point in LAB space.
+        # floodFill requires a mask 2px larger than the image on each axis.
+        flood_mask = np.zeros((height + 2, width + 2), np.uint8)
+        lo_diff = (tolerance, tolerance, tolerance)
+        hi_diff = (tolerance, tolerance, tolerance)
+        cv2.floodFill(
+            img_lab, flood_mask, (x, y), 255,
+            loDiff=lo_diff, hiDiff=hi_diff,
+            flags=cv2.FLOODFILL_MASK_ONLY | (255 << 8),
+        )
+        mask = flood_mask[1:-1, 1:-1]
 
         kernel = np.ones((3, 3), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
         mask_img = Image.fromarray(mask, mode='L')
