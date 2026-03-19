@@ -1130,6 +1130,40 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
                 pos_inside = f"top:-{bleed}in;left:-{bleed}in;width:{total_spread_width}in;height:{total_spread_height}in;"
                 pink_inside_html = generate_fluorescent_svg(inside_mask, 'pink-mask-inside', im_w, im_h, pos_inside)
 
+    # SCODIX foil spot color support (user-selected regions via SAM masks)
+    # Front panel is on the RIGHT side of outside spread (Panel 1).
+    # Back panel is on the LEFT side of outside spread (Panel 4).
+    is_foil = settings.get('print_mode') == 'foil'
+    foil_outside_left_html = ''
+    foil_outside_right_html = ''
+    if is_foil:
+        pos_left = f"top:-{bleed}in;left:-{bleed}in;width:{half_w}in;height:{total_spread_height}in;"
+        pos_right = f"top:-{bleed}in;left:{half_w - bleed}in;width:{half_w}in;height:{total_spread_height}in;"
+        foil_regions = settings.get('foil_regions', {})
+
+        if foil_regions.get('front_knockout') and image_data:
+            image_data, image_type = inpaint_knockout_region(
+                image_data, image_type, foil_regions['front_knockout'])
+        if foil_regions.get('back_knockout') and back_image_data:
+            back_image_data, back_image_type = inpaint_knockout_region(
+                back_image_data, back_image_type, foil_regions['back_knockout'])
+
+        for mode, overprint in [('overprint', True), ('knockout', False)]:
+            front_key = f'front_{mode}'
+            back_key = f'back_{mode}'
+            if foil_regions.get(front_key):
+                fw, fh = _get_mask_dimensions(foil_regions[front_key])
+                foil_outside_right_html += generate_scodix_svg(
+                    foil_regions[front_key],
+                    f'scodix-{mode}-front', fw, fh, pos_right, overprint
+                )
+            if foil_regions.get(back_key):
+                bw, bh = _get_mask_dimensions(foil_regions[back_key])
+                foil_outside_left_html += generate_scodix_svg(
+                    foil_regions[back_key],
+                    f'scodix-{mode}-back', bw, bh, pos_left, overprint
+                )
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -1224,6 +1258,8 @@ def generate_folded_card_html(image_data, image_type, settings, inside_image_dat
         {silver_outside_html}
         {pink_outside_left_html}
         {pink_outside_right_html}
+        {foil_outside_left_html}
+        {foil_outside_right_html}
         <div class="spread-content" style="background-color:{outside_bg};">
             <!-- Panel 4: Back Cover (left side of spread) -->
             <div class="panel">
